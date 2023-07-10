@@ -1,0 +1,13 @@
+name = "StochasticBlockModelVariants"
+uuid = "37adabcb-1964-4c56-850d-39a4302c0c39"
+authors = ["Guillaume Dalle <22795598+gdalle@users.noreply.github.com> and contributors"]
+version = "1.0.0-DEV"
+
+[compat]
+julia = "1.9"
+
+[extras]
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[targets]
+test = ["Test"]

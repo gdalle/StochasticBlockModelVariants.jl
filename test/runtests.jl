@@ -27,4 +27,8 @@ using Test
     @testset "Doctests" begin
         doctest(StochasticBlockModelVariants)
     end
+
+    @testset verbose = true "Contextual SBM" begin
+        include("contextual_sbm.jl")
+    end
 end

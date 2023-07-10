@@ -1,5 +1,5 @@
 using StochasticBlockModelVariants
 
-csbm = ContextualSBM(; d=3, λ=1, μ=2.0, N=10, P=20)
+csbm = ContextualSBM(; d=3.0, λ=1.0, μ=2.0, N=10, P=20)
 
-(; latents, obs) = rand(csbm)
+(; latents, observations) = rand(csbm)

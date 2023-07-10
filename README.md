@@ -9,3 +9,8 @@
 Simulation and inference for contextual and neural SBMs 
 
 > This is an experimental, unregistered package. Use at your own risk!
+
+My code is based on the following research by O. Duranthon and L. Zdeborovà:
+
+- <https://arxiv.org/abs/2306.07948>
+- <https://arxiv.org/abs/2303.09995>

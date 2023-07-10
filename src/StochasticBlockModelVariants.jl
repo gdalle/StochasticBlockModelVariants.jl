@@ -1,8 +1,10 @@
 module StochasticBlockModelVariants
 
-using SimpleWeightedGraphs: SimpleWeightedGraph
-using LinearAlgebra: Symmetric
+using Base
+using Graphs: AbstractGraph
+using LinearAlgebra: Symmetric, dot
 using Random: AbstractRNG, default_rng
+using SimpleWeightedGraphs: SimpleWeightedGraph
 using SparseArrays: SparseMatrixCSC, sparse
 
 export ContextualSBM, ContextualSBMLatents, ContextualSBMObservations

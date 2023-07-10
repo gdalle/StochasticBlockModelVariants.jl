@@ -1,7 +1,12 @@
 using StochasticBlockModelVariants
 using Documenter
 
-DocMeta.setdocmeta!(StochasticBlockModelVariants, :DocTestSetup, :(using StochasticBlockModelVariants); recursive=true)
+DocMeta.setdocmeta!(
+    StochasticBlockModelVariants,
+    :DocTestSetup,
+    :(using StochasticBlockModelVariants);
+    recursive=true,
+)
 
 makedocs(;
     modules=[StochasticBlockModelVariants],
@@ -14,12 +19,7 @@ makedocs(;
         edit_link="main",
         assets=String[],
     ),
-    pages=[
-        "Home" => "index.md",
-    ],
+    pages=["Home" => "index.md"],
 )
 
-deploydocs(;
-    repo="github.com/gdalle/StochasticBlockModelVariants.jl",
-    devbranch="main",
-)
+deploydocs(; repo="github.com/gdalle/StochasticBlockModelVariants.jl", devbranch="main")

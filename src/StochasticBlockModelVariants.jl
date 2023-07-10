@@ -1,5 +1,7 @@
 module StochasticBlockModelVariants
 
-# Write your package code here.
+using Graphs
+using LinearAlgebra
+using SparseArrays
 
 end

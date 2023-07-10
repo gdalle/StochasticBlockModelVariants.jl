@@ -1,9 +1,15 @@
 name = "StochasticBlockModelVariants"
 uuid = "37adabcb-1964-4c56-850d-39a4302c0c39"
 authors = ["Guillaume Dalle <22795598+gdalle@users.noreply.github.com> and contributors"]
-version = "1.0.0-DEV"
+version = "0.1.0"
+
+[deps]
+Graphs = "86223c79-3864-5bf0-83f7-82e725a168b6"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
 
 [compat]
+Graphs = "1.8"
 julia = "1.9"
 
 [extras]

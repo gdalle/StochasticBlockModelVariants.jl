@@ -123,18 +123,6 @@ function update_amp!(
     h̃₊ .= -h₊ .+ log(one(R) / 2) .+ û_no_feat
     h̃₋ .= -h₋ .+ log(one(R) / 2) .- û_no_feat
 
-    # BP update of the messages
-    for i in 1:N, j in neighbors(g, i)
-        s_ij = h̃₊[i] - h̃₋[i]
-        for k in neighbors(g, i)
-            if k != j
-                common = 2λ * sqrt(d) * χ₊eᵗ[k, i]
-                s_ij += log((cₒ + common) / (cᵢ - common))
-            end
-        end
-        χ₊eᵗ⁺¹[i, j] = sigmoid(s_ij)
-    end
-
     # BP update of the marginals
     for i in 1:N
         s_i = h̃₊[i] - h̃₋[i]
@@ -142,7 +130,20 @@ function update_amp!(
             common = 2λ * sqrt(d) * χ₊eᵗ[k, i]
             s_i += log((cₒ + common) / (cᵢ - common))
         end
-        χ₊[i] = sigmoid(s_i)
+        χ₊[i] = s_i
+    end
+
+    # BP update of the messages
+    for i in 1:N, j in neighbors(g, i)
+        common = 2λ * sqrt(d) * χ₊eᵗ[j, i]
+        s_ij = log((cₒ + common) / (cᵢ - common))
+        χ₊eᵗ⁺¹[i, j] = χ₊[i] - s_ij
+    end
+
+    # Sigmoidize probabilities
+    χ₊ .= sigmoid.(χ₊)
+    for (key, val) in pairs(χ₊eᵗ⁺¹)
+        χ₊eᵗ⁺¹[key] = sigmoid(val)
     end
 
     # BP estimation of u
@@ -155,17 +156,15 @@ function run_amp(
     rng::AbstractRNG;
     observations::ContextualSBMObservations,
     csbm::ContextualSBM,
-    init_std::Real,
-    iterations::Integer,
+    init_std::Real=1e-3,
+    iterations::Integer=10,
 )
     (; storage, next_storage, temp_storage) = init_amp(rng; observations, csbm, init_std)
     storage_history = [copy(storage)]
-    temp_storage_history = [copy(temp_storage)]
-    @showprogress "AMP-BP" for iter in 1:iterations
+    for iter in 1:iterations
         update_amp!(next_storage, temp_storage; storage, observations, csbm)
         copy!(storage, next_storage)
         push!(storage_history, copy(storage))
-        push!(temp_storage_history, copy(temp_storage))
     end
     return storage_history
 end

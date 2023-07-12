@@ -10,8 +10,8 @@ function test_recovery(csbm::ContextualSBM)
     @assert effective_snr(csbm) > 1
     (; latents, observations) = rand(rng, csbm)
     storage_history = run_amp(rng; observations, csbm)
-    overlap_history = [evaluate_amp(; storage, latents) for storage in storage_history]
-    @test last(overlap_history) > 10 * first(overlap_history)
+    overlap_history = [overlap(; storage, latents) for storage in storage_history]
+    @test last(overlap_history) > first(overlap_history)
     @test last(overlap_history) > 0.5
     return nothing
 end
@@ -41,6 +41,7 @@ end
     test_recovery(ContextualSBM(; N=10^3, P=10^3, d=5, λ=2, μ=2, ρ=0.0))  # AMP-BP
     test_recovery(ContextualSBM(; N=10^3, P=10^3, d=5, λ=0, μ=2, ρ=0.0))  # AMP
     test_recovery(ContextualSBM(; N=10^3, P=10^3, d=5, λ=2, μ=0, ρ=0.0))  # BP
+    test_recovery(ContextualSBM(; N=10^2, P=10^2, d=5, λ=2, μ=0, ρ=0.5))  # semi-supervised
 end
 
 @testset "Good code" begin

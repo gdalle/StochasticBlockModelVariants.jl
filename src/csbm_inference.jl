@@ -59,16 +59,15 @@ end
 
 function init_amp(
     rng::AbstractRNG;
-    observations::ContextualSBMObservations{R1},
-    csbm::ContextualSBM{R2},
-    init_std::R3,
-) where {R1,R2,R3}
-    R = promote_type(R1, R2, R3)
+    observations::ContextualSBMObservations{R},
+    csbm::ContextualSBM{R},
+    init_std,
+) where {R}
     (; N, P) = csbm
-    (; g) = observations
+    (; g, Ξ) = observations
 
-    û = init_std .* randn(rng, R, N)
-    v̂ = init_std .* randn(rng, R, P)
+    û = prior₊.(R, Ξ) + init_std .* randn(rng, R, N)
+    v̂ = 2 .* prior₊.(R, Ξ) .- one(R) .+ init_std .* randn(rng, R, P)
     χ₊e = Dict{Tuple{Int,Int},R}()
     for i in 1:N, j in neighbors(g, i)
         χ₊e[i, j] = (one(R) / 2) + init_std * randn(rng, R)
@@ -86,15 +85,18 @@ function init_amp(
     return (; storage, next_storage, temp_storage)
 end
 
+prior₊(::Type{R}, Ξᵢ) where {R} = Ξᵢ == 0 ? one(R) / 2 : R(Ξᵢ == 1)
+prior₋(::Type{R}, Ξᵢ) where {R} = Ξᵢ == 0 ? one(R) / 2 : R(Ξᵢ == -1)
+
 function update_amp!(
-    next_storage::AMPStorage,
-    temp_storage::AMPTempStorage;
-    storage::AMPStorage,
-    observations::ContextualSBMObservations,
+    next_storage::AMPStorage{R},
+    temp_storage::AMPTempStorage{R};
+    storage::AMPStorage{R},
+    observations::ContextualSBMObservations{R},
     csbm::ContextualSBM{R},
 ) where {R}
     (; d, λ, μ, N, P) = csbm
-    (; g, B) = observations
+    (; g, B, Ξ) = observations
     (; cᵢ, cₒ) = affinities(csbm)
 
     ûᵗ, v̂ᵗ, χ₊eᵗ = storage.û, storage.v̂, storage.χ₊e
@@ -109,8 +111,8 @@ function update_amp!(
     mul!(v̂_no_comm, B, ûᵗ)
     v̂_no_comm .*= sqrt(μ / N)
     v̂_no_comm .-= (μ / N) .* v̂ᵗ .* (N - ûₜ_sum2)
-    v̂ᵗ⁺¹ .= v̂_no_comm ./ (1 + σᵥ_no_comm)
-    σᵥ = 1 / (1 + σᵥ_no_comm)
+    v̂ᵗ⁺¹ .= v̂_no_comm ./ (one(R) + σᵥ_no_comm)
+    σᵥ = one(R) / (one(R) + σᵥ_no_comm)
 
     # BP estimation of u
     mul!(û_no_feat, B', v̂ᵗ⁺¹)
@@ -118,10 +120,10 @@ function update_amp!(
     û_no_feat .-= (μ / (N / P)) .* σᵥ .* ûᵗ
 
     # Estimation of the field h
-    h₊ = (1 / 2N) * (cᵢ * (N + ûₜ_sum) + cₒ * (N - ûₜ_sum))
-    h₋ = (1 / 2N) * (cₒ * (N + ûₜ_sum) + cᵢ * (N - ûₜ_sum))
-    h̃₊ .= -h₊ .+ log(one(R) / 2) .+ û_no_feat
-    h̃₋ .= -h₋ .+ log(one(R) / 2) .- û_no_feat
+    h₊ = (one(R) / 2N) * (cᵢ * (N + ûₜ_sum) + cₒ * (N - ûₜ_sum))
+    h₋ = (one(R) / 2N) * (cₒ * (N + ûₜ_sum) + cᵢ * (N - ûₜ_sum))
+    h̃₊ .= -h₊ .+ log.(prior₊.(R, Ξ)) .+ û_no_feat
+    h̃₋ .= -h₋ .+ log.(prior₋.(R, Ξ)) .- û_no_feat
 
     # BP update of the marginals
     for i in 1:N
@@ -147,7 +149,7 @@ function update_amp!(
     end
 
     # BP estimation of u
-    ûᵗ⁺¹ .= 2 .* χ₊ .- 1
+    ûᵗ⁺¹ .= 2 .* χ₊ .- one(R)
 
     return nothing
 end
@@ -158,18 +160,21 @@ function run_amp(
     csbm::ContextualSBM,
     init_std::Real=1e-3,
     iterations::Integer=10,
+    show_progress=false,
 )
     (; storage, next_storage, temp_storage) = init_amp(rng; observations, csbm, init_std)
     storage_history = [copy(storage)]
-    for iter in 1:iterations
+    prog = Progress(iterations; desc="AMP-BP", enabled=show_progress)
+    for _ in 1:iterations
         update_amp!(next_storage, temp_storage; storage, observations, csbm)
         copy!(storage, next_storage)
         push!(storage_history, copy(storage))
+        next!(prog)
     end
     return storage_history
 end
 
-function evaluate_amp(; storage::AMPStorage, latents::ContextualSBMLatents)
+function overlap(; storage::AMPStorage, latents::ContextualSBMLatents)
     û = sign.(storage.û)
     @assert all(abs.(û) .> 0.5)
     u = latents.u

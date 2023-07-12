@@ -79,8 +79,11 @@ function Base.rand(rng::AbstractRNG, csbm::ContextualSBM)
 
     r = rand(rng, N, N)
     Is, Js = Int[], Int[]
-    for i in 1:N, j in 1:i
-        if ((u[i] == u[j]) && (r[i, j] < cᵢ / N)) || ((u[i] != u[j]) && (r[i, j] < cₒ / N))
+    for i in 1:N, j in (i + 1):N
+        if (
+            ((u[i] == u[j]) && (r[i, j] < cᵢ / N)) ||  # same
+            ((u[i] != u[j]) && (r[i, j] < cₒ / N))  # diff
+        )
             push!(Is, i)
             push!(Js, j)
         end
@@ -155,6 +158,16 @@ end
     χ₊::Vector{R}
 end
 
+function Base.copy(temp_storage::AMPTempStorage)
+    return AMPTempStorage(;
+        û_no_feat=copy(temp_storage.û_no_feat),
+        v̂_no_graph=copy(temp_storage.v̂_no_graph),
+        h̃₊=copy(temp_storage.h̃₊),
+        h̃₋=copy(temp_storage.h̃₋),
+        χ₊=copy(temp_storage.χ₊),
+    )
+end
+
 function init_amp(
     rng::AbstractRNG;
     observations::ContextualSBMObservations,
@@ -191,8 +204,8 @@ function update_amp!(
     temp_storage::AMPTempStorage;
     storage::AMPStorage,
     observations::ContextualSBMObservations,
-    csbm::ContextualSBM,
-)
+    csbm::ContextualSBM{R},
+) where {R}
     (; d, λ, μ, N, P) = csbm
     (; B, G) = observations
     (; cᵢ, cₒ) = affinities(csbm)
@@ -223,18 +236,19 @@ function update_amp!(
     h₊ = (1 / N) * sum(cᵢ * (1 + ûᵗ[i]) / 2 + cₒ * (1 - ûᵗ[i]) / 2 for i in 1:N)
     h₋ = (1 / N) * sum(cₒ * (1 + ûᵗ[i]) / 2 + cᵢ * (1 - ûᵗ[i]) / 2 for i in 1:N)
     for i in 1:N
-        h̃₊[i] = -h₊ + û_no_feat[i]
-        h̃₋[i] = -h₋ - û_no_feat[i]
+        h̃₊[i] = -h₊ + log(one(R) / 2) + û_no_feat[i]
+        h̃₋[i] = -h₋ + log(one(R) / 2) - û_no_feat[i]
     end
 
     # BP update of the messages
     for i in 1:N, j in neighbors(G, i)
         s_ij = h̃₊[i] - h̃₋[i]
         for k in neighbors(G, i)
-            k != j || continue
-            num = (cₒ + 2λ * sqrt(d) * χ₊eᵗ[k, i])
-            den = (cᵢ - 2λ * sqrt(d) * χ₊eᵗ[k, i])
-            s_ij += log(num / den)
+            if k != j
+                num = (cₒ + 2λ * sqrt(d) * χ₊eᵗ[k, i])
+                den = (cᵢ - 2λ * sqrt(d) * χ₊eᵗ[k, i])
+                s_ij += log(num / den)
+            end
         end
         χ₊eᵗ⁺¹[i, j] = sigmoid(s_ij)
     end
@@ -267,19 +281,21 @@ function run_amp(
 )
     (; storage, next_storage, temp_storage) = init_amp(rng; observations, csbm, init_std)
     storage_history = [copy(storage)]
+    temp_storage_history = [copy(temp_storage)]
     @showprogress "AMP-BP" for iter in 1:iterations
         update_amp!(next_storage, temp_storage; storage, observations, csbm)
         copy!(storage, next_storage)
         push!(storage_history, copy(storage))
+        push!(temp_storage_history, copy(temp_storage))
     end
     return storage_history
 end
 
 function evaluate_amp(; storage::AMPStorage, latents::ContextualSBMLatents)
+    û = sign.(storage.û)
+    @assert all(abs.(û) .> 0.5)
     u = latents.u
-    N = length(u)
-    û = 2 .* Int.(storage.û .> 0) .- 1
-    q̂ᵤ = (1 / N) * max(count_equalities(û, u), count_equalities(û, -u))
+    q̂ᵤ = (1 / length(û)) * max(count_equalities(û, u), count_equalities(û, -u))
     qᵤ = 2 * (q̂ᵤ - 0.5)
     return qᵤ
 end

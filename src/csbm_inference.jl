@@ -1,109 +1,4 @@
-## Model
-
-"""
-    ContextualSBM
-
-# Fields
-
-- `d`: average degree
-- `λ`: SNR of the graph
-- `μ`: SNR of the features
-- `N`: graph size
-- `P`: feature dimension
-"""
-@kwdef struct ContextualSBM{R<:Real}
-    d::R
-    λ::R
-    μ::R
-    N::Int
-    P::Int
-end
-
-function effective_snr(csbm::ContextualSBM)
-    (; λ, μ, N, P) = csbm
-    return λ^2 + μ^2 / (N / P)
-end
-
-function affinities(csbm::ContextualSBM)
-    (; d, λ) = csbm
-    cᵢ = d + λ * sqrt(d)
-    cₒ = d - λ * sqrt(d)
-    return (; cᵢ, cₒ)
-end
-
-## Latents
-
-"""
-    ContextualSBMLatents
-
-# Fields
-
-- `u::Vector`: community assignments, length `N`
-- `v::Vector`: feature centroids, length `P`
-"""
-@kwdef struct ContextualSBMLatents{R<:Real}
-    u::Vector{Int}
-    v::Vector{R}
-end
-
-## Observations
-
-"""
-    ContextualSBMObservations
-
-# Fields
-
-- `A::AbstractMatrix`: adjacency matrix, size `(N, N)`
-- `B::Matrix`: feature matrix, size `(P, N)`
-- `G::AbstractGraph`: unweighted graph generated from `A`
-"""
-@kwdef struct ContextualSBMObservations{R<:Real,AM<:AbstractMatrix{Bool},AG<:AbstractGraph}
-    A::AM
-    B::Matrix{R}
-    G::AG
-end
-
-## Simulation
-
-"""
-    rand(rng, csbm)
-
-Simulate a contextual SBM, return a named tuple `(; latents, observations)`.
-"""
-function Base.rand(rng::AbstractRNG, csbm::ContextualSBM)
-    (; μ, N, P) = csbm
-    (; cᵢ, cₒ) = affinities(csbm)
-
-    u = rand(rng, (-1, +1), N)
-    v = randn(rng, P)
-
-    r = rand(rng, N, N)
-    Is, Js = Int[], Int[]
-    for i in 1:N, j in (i + 1):N
-        if (
-            ((u[i] == u[j]) && (r[i, j] < cᵢ / N)) ||  # same
-            ((u[i] != u[j]) && (r[i, j] < cₒ / N))  # diff
-        )
-            push!(Is, i)
-            push!(Js, j)
-        end
-    end
-    Vs = fill(true, length(Is))
-    A = Symmetric(sparse(Is, Js, Vs, N, N))
-    G = SimpleWeightedGraph(A)
-
-    Z = randn(rng, P, N)
-    B = similar(Z)
-    for i in 1:N, α in 1:P
-        B[α, i] = sqrt(μ / N) * v[α] * u[i] + Z[α, i]
-    end
-
-    latents = ContextualSBMLatents(; u, v)
-    observations = ContextualSBMObservations(; A, B, G)
-    return (; latents, observations)
-end
-
-## Message-passing
+## Storage
 
 """
     AMPStorage
@@ -112,20 +7,12 @@ end
 
 - `û::Vector`: posterior mean of `u`, length `N`
 - `v̂::Vector`: posterior mean of `v`, length `P`
-- `χ₊e::AbstractMatrix`: message about the marginal distribution of `u`, size `(N, N)`
+- `χ₊e::Dict`: messages about the marginal distribution of `u`, size `(N, N)`
 """
-@kwdef struct AMPStorage{R<:Real,M<:AbstractMatrix{R}}
+@kwdef struct AMPStorage{R<:Real}
     û::Vector{R}
     v̂::Vector{R}
-    χ₊e::M
-end
-
-function Base.:(==)(storage1::AMPStorage, storage2::AMPStorage)
-    return (
-        storage1.û == storage2.û &&
-        storage1.v̂ == storage2.v̂ &&
-        storage1.χ₊e == storage2.χ₊e
-    )
+    χ₊e::Dict{Tuple{Int,Int},R}
 end
 
 function Base.copy(storage::AMPStorage)
@@ -135,7 +22,7 @@ end
 function Base.copy!(storage_dest::AMPStorage, storage_source::AMPStorage)
     storage_dest.û .= storage_source.û
     storage_dest.v̂ .= storage_source.v̂
-    storage_dest.χ₊e .= storage_source.χ₊e
+    copy!(storage_dest.χ₊e, storage_source.χ₊e)
     return storage_dest
 end
 
@@ -145,14 +32,14 @@ end
 # Fields
 
 - `û_no_feat::Vector`: posterior mean of `u` if there were no features, length `N` (aka `Bᵥ`)
-- `v̂_no_graph::Vector`: posterior mean of `v` if there were no graph, length `P` (aka `Bᵤ`)
+- `v̂_no_comm::Vector`: posterior mean of `v` if there were no communities, length `P` (aka `Bᵤ`)
 - `h̃₊::Vector`: individual external field for `u=1`, length `N`
 - `h̃₋::Vector`: individual external field for `u=-1`, length `N`
 - `χ₊::Vector`: marginal probability of `u=1`, length `N`
 """
 @kwdef struct AMPTempStorage{R<:Real}
     û_no_feat::Vector{R}
-    v̂_no_graph::Vector{R}
+    v̂_no_comm::Vector{R}
     h̃₊::Vector{R}
     h̃₋::Vector{R}
     χ₊::Vector{R}
@@ -161,40 +48,40 @@ end
 function Base.copy(temp_storage::AMPTempStorage)
     return AMPTempStorage(;
         û_no_feat=copy(temp_storage.û_no_feat),
-        v̂_no_graph=copy(temp_storage.v̂_no_graph),
+        v̂_no_comm=copy(temp_storage.v̂_no_comm),
         h̃₊=copy(temp_storage.h̃₊),
         h̃₋=copy(temp_storage.h̃₋),
         χ₊=copy(temp_storage.χ₊),
     )
 end
 
+## Message-passing
+
 function init_amp(
     rng::AbstractRNG;
-    observations::ContextualSBMObservations,
-    csbm::ContextualSBM{R},
-    init_std::Real,
-) where {R}
+    observations::ContextualSBMObservations{R1},
+    csbm::ContextualSBM{R2},
+    init_std::R3,
+) where {R1,R2,R3}
+    R = promote_type(R1, R2, R3)
     (; N, P) = csbm
-    (; G) = observations
+    (; g) = observations
 
     û = init_std .* randn(rng, R, N)
     v̂ = init_std .* randn(rng, R, P)
-    Is, Js = Int[], Int[]
-    for i in 1:N, j in neighbors(G, i)
-        push!(Is, i)
-        push!(Js, j)
+    χ₊e = Dict{Tuple{Int,Int},R}()
+    for i in 1:N, j in neighbors(g, i)
+        χ₊e[i, j] = (one(R) / 2) + init_std * randn(rng, R)
     end
-    Vs = (one(R) / 2) .+ init_std .* randn(rng, R, length(Is))
-    χ₊e = sparse(Is, Js, Vs, N, N)
     storage = AMPStorage(; û, v̂, χ₊e)
     next_storage = copy(storage)
 
     û_no_feat = zeros(R, N)
-    v̂_no_graph = zeros(R, P)
+    v̂_no_comm = zeros(R, P)
     h̃₊ = zeros(R, N)
     h̃₋ = zeros(R, N)
     χ₊ = zeros(R, N)
-    temp_storage = AMPTempStorage(; û_no_feat, v̂_no_graph, h̃₊, h̃₋, χ₊)
+    temp_storage = AMPTempStorage(; û_no_feat, v̂_no_comm, h̃₊, h̃₋, χ₊)
 
     return (; storage, next_storage, temp_storage)
 end
@@ -207,23 +94,23 @@ function update_amp!(
     csbm::ContextualSBM{R},
 ) where {R}
     (; d, λ, μ, N, P) = csbm
-    (; B, G) = observations
+    (; g, B) = observations
     (; cᵢ, cₒ) = affinities(csbm)
 
     ûᵗ, v̂ᵗ, χ₊eᵗ = storage.û, storage.v̂, storage.χ₊e
     ûᵗ⁺¹, v̂ᵗ⁺¹, χ₊eᵗ⁺¹ = next_storage.û, next_storage.v̂, next_storage.χ₊e
-    (; û_no_feat, v̂_no_graph, h̃₊, h̃₋, χ₊) = temp_storage
+    (; û_no_feat, v̂_no_comm, h̃₊, h̃₋, χ₊) = temp_storage
 
     # AMP estimation of v
-    σᵥ_no_graph = (μ / N) * sum(ûᵗ[i]^2 for i in 1:N)
+    σᵥ_no_comm = (μ / N) * sum(ûᵗ[i]^2 for i in 1:N)
     for α in 1:P
-        v̂_no_graph[α] = (
+        v̂_no_comm[α] = (
             sqrt(μ / N) * sum(B[α, i] * ûᵗ[i] for i in 1:N) -
             (μ / N) * sum((1 - ûᵗ[i]^2) * v̂ᵗ[α] for i in 1:N)
         )
-        v̂ᵗ⁺¹[α] = v̂_no_graph[α] / (1 + σᵥ_no_graph)
+        v̂ᵗ⁺¹[α] = v̂_no_comm[α] / (1 + σᵥ_no_comm)
     end
-    σᵥ = 1 / (1 + σᵥ_no_graph)
+    σᵥ = 1 / (1 + σᵥ_no_comm)
 
     # BP estimation of u
     for i in 1:N
@@ -241,9 +128,9 @@ function update_amp!(
     end
 
     # BP update of the messages
-    for i in 1:N, j in neighbors(G, i)
+    for i in 1:N, j in neighbors(g, i)
         s_ij = h̃₊[i] - h̃₋[i]
-        for k in neighbors(G, i)
+        for k in neighbors(g, i)
             if k != j
                 num = (cₒ + 2λ * sqrt(d) * χ₊eᵗ[k, i])
                 den = (cᵢ - 2λ * sqrt(d) * χ₊eᵗ[k, i])
@@ -256,7 +143,7 @@ function update_amp!(
     # BP update of the marginals
     for i in 1:N
         s_i = h̃₊[i] - h̃₋[i]
-        for k in neighbors(G, i)
+        for k in neighbors(g, i)
             num = (cₒ + 2λ * sqrt(d) * χ₊eᵗ[k, i])
             den = (cᵢ - 2λ * sqrt(d) * χ₊eᵗ[k, i])
             s_i += log(num / den)

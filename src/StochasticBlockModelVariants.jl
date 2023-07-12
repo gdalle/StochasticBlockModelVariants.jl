@@ -1,11 +1,10 @@
 module StochasticBlockModelVariants
 
-using Base: RefValue
-using Graphs: AbstractGraph, has_edge, neighbors
+using Graphs: AbstractGraph, neighbors
 using LinearAlgebra: Symmetric, dot
 using ProgressMeter: @showprogress
 using Random: AbstractRNG, default_rng
-using SimpleWeightedGraphs: SimpleWeightedGraph, SimpleWeightedDiGraph
+using SimpleWeightedGraphs: SimpleWeightedGraph
 using Statistics: mean
 using SparseArrays: SparseMatrixCSC, sparse, findnz
 
@@ -14,6 +13,7 @@ export affinities, effective_snr
 export init_amp, update_amp!, run_amp, evaluate_amp
 
 include("utils.jl")
-include("contextual_sbm.jl")
+include("csbm.jl")
+include("csbm_inference.jl")
 
 end

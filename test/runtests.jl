@@ -29,6 +29,6 @@ using Test
     end
 
     @testset verbose = true "Contextual SBM" begin
-        include("contextual_sbm.jl")
+        include("csbm.jl")
     end
 end

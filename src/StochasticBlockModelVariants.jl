@@ -11,7 +11,8 @@ using SparseArrays: SparseMatrixCSC, sparse, findnz
 
 export ContextualSBM, ContextualSBMLatents, ContextualSBMObservations
 export affinities, effective_snr
-export init_amp, update_amp!, run_amp, overlaps
+export overlaps
+export init_amp, update_amp!, run_amp, evaluate_amp
 
 include("utils.jl")
 include("csbm.jl")

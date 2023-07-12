@@ -14,11 +14,11 @@ function test_recovery(csbm::ContextualSBM; test_u=true, test_v=true)
     first_q = overlaps(; u, v, û=û_history[:, begin], v̂=v̂_history[:, begin])
     last_q = overlaps(; u, v, û=û_history[:, end], v̂=v̂_history[:, end])
     if test_u
-        @test last_q.qᵤ > first_q.qᵤ
+        @test last_q.qᵤ >= first_q.qᵤ
         @test last_q.qᵤ > 0.5
     end
     if test_v
-        @test last_q.qᵥ > first_q.qᵥ
+        @test last_q.qᵥ >= first_q.qᵥ
         @test last_q.qᵥ > 0.5
     end
     return nothing

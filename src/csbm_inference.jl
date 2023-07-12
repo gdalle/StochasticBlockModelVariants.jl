@@ -175,11 +175,11 @@ function run_amp(
     rng::AbstractRNG;
     observations::ContextualSBMObservations{R},
     csbm::ContextualSBM{R},
-    init_std::Real=1e-3,
-    max_iterations::Integer=200,
+    init_std=1e-3,
+    max_iterations=200,
     convergence_threshold=1e-3,
     recent_past=10,
-    show_progress::Bool=false,
+    show_progress=false,
 ) where {R}
     (; N, P) = csbm
     (; marginals, next_marginals, storage) = init_amp(rng; observations, csbm, init_std)
@@ -221,4 +221,13 @@ function run_amp(
     end
 
     return (; û_history, v̂_history, converged)
+end
+
+function evaluate_amp(rng::AbstractRNG; csbm::ContextualSBM, kwargs...)
+    (; latents, observations) = rand(rng, csbm)
+    (; û_history, v̂_history, converged) = run_amp(rng; observations, csbm, kwargs...)
+    (; qᵤ, qᵥ) = overlaps(;
+        u=latents.u, v=latents.v, û=û_history[:, end], v̂=v̂_history[:, end]
+    )
+    return (; qᵤ, qᵥ)
 end

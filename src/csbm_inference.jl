@@ -101,40 +101,35 @@ function update_amp!(
     ûᵗ⁺¹, v̂ᵗ⁺¹, χ₊eᵗ⁺¹ = next_storage.û, next_storage.v̂, next_storage.χ₊e
     (; û_no_feat, v̂_no_comm, h̃₊, h̃₋, χ₊) = temp_storage
 
+    ûₜ_sum = sum(ûᵗ)
+    ûₜ_sum2 = sum(abs2, ûᵗ)
+
     # AMP estimation of v
-    σᵥ_no_comm = (μ / N) * sum(ûᵗ[i]^2 for i in 1:N)
-    for α in 1:P
-        v̂_no_comm[α] = (
-            sqrt(μ / N) * sum(B[α, i] * ûᵗ[i] for i in 1:N) -
-            (μ / N) * sum((1 - ûᵗ[i]^2) * v̂ᵗ[α] for i in 1:N)
-        )
-        v̂ᵗ⁺¹[α] = v̂_no_comm[α] / (1 + σᵥ_no_comm)
-    end
+    σᵥ_no_comm = (μ / N) * ûₜ_sum2
+    mul!(v̂_no_comm, B, ûᵗ)
+    v̂_no_comm .*= sqrt(μ / N)
+    v̂_no_comm .-= (μ / N) .* v̂ᵗ .* (N - ûₜ_sum2)
+    v̂ᵗ⁺¹ .= v̂_no_comm ./ (1 + σᵥ_no_comm)
     σᵥ = 1 / (1 + σᵥ_no_comm)
 
     # BP estimation of u
-    for i in 1:N
-        û_no_feat[i] = (
-            sqrt(μ / N) * sum(B[α, i] * v̂ᵗ⁺¹[α] for α in 1:P) - (μ / (N / P)) * σᵥ * ûᵗ[i]
-        )
-    end
+    mul!(û_no_feat, B', v̂ᵗ⁺¹)
+    û_no_feat .*= sqrt(μ / N)
+    û_no_feat .-= (μ / (N / P)) .* σᵥ .* ûᵗ
 
     # Estimation of the field h
-    h₊ = (1 / N) * sum(cᵢ * (1 + ûᵗ[i]) / 2 + cₒ * (1 - ûᵗ[i]) / 2 for i in 1:N)
-    h₋ = (1 / N) * sum(cₒ * (1 + ûᵗ[i]) / 2 + cᵢ * (1 - ûᵗ[i]) / 2 for i in 1:N)
-    for i in 1:N
-        h̃₊[i] = -h₊ + log(one(R) / 2) + û_no_feat[i]
-        h̃₋[i] = -h₋ + log(one(R) / 2) - û_no_feat[i]
-    end
+    h₊ = (1 / 2N) * (cᵢ * (N + ûₜ_sum) + cₒ * (N - ûₜ_sum))
+    h₋ = (1 / 2N) * (cₒ * (N + ûₜ_sum) + cᵢ * (N - ûₜ_sum))
+    h̃₊ .= -h₊ .+ log(one(R) / 2) .+ û_no_feat
+    h̃₋ .= -h₋ .+ log(one(R) / 2) .- û_no_feat
 
     # BP update of the messages
     for i in 1:N, j in neighbors(g, i)
         s_ij = h̃₊[i] - h̃₋[i]
         for k in neighbors(g, i)
             if k != j
-                num = (cₒ + 2λ * sqrt(d) * χ₊eᵗ[k, i])
-                den = (cᵢ - 2λ * sqrt(d) * χ₊eᵗ[k, i])
-                s_ij += log(num / den)
+                common = 2λ * sqrt(d) * χ₊eᵗ[k, i]
+                s_ij += log((cₒ + common) / (cᵢ - common))
             end
         end
         χ₊eᵗ⁺¹[i, j] = sigmoid(s_ij)
@@ -144,17 +139,14 @@ function update_amp!(
     for i in 1:N
         s_i = h̃₊[i] - h̃₋[i]
         for k in neighbors(g, i)
-            num = (cₒ + 2λ * sqrt(d) * χ₊eᵗ[k, i])
-            den = (cᵢ - 2λ * sqrt(d) * χ₊eᵗ[k, i])
-            s_i += log(num / den)
+            common = 2λ * sqrt(d) * χ₊eᵗ[k, i]
+            s_i += log((cₒ + common) / (cᵢ - common))
         end
         χ₊[i] = sigmoid(s_i)
     end
 
     # BP estimation of u
-    for i in 1:N
-        ûᵗ⁺¹[i] = 2χ₊[i] - 1
-    end
+    ûᵗ⁺¹ .= 2 .* χ₊ .- 1
 
     return nothing
 end

@@ -1,7 +1,7 @@
 module StochasticBlockModelVariants
 
 using Graphs: AbstractGraph, neighbors
-using LinearAlgebra: Symmetric, dot
+using LinearAlgebra: dot, mul!
 using ProgressMeter: @showprogress
 using Random: AbstractRNG, default_rng
 using SimpleWeightedGraphs: SimpleWeightedGraph

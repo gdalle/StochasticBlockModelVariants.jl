@@ -4,35 +4,45 @@ using Statistics
 using StochasticBlockModelVariants
 using Test
 
-rng = default_rng()
-
-function test_recovery(csbm::ContextualSBM)
+function test_recovery(csbm::ContextualSBM; test_u=true, test_v=true)
+    rng = default_rng()
     @assert effective_snr(csbm) > 1
     (; latents, observations) = rand(rng, csbm)
-    storage_history = run_amp(rng; observations, csbm)
-    overlap_history = [overlap(; storage, latents) for storage in storage_history]
-    @test last(overlap_history) > first(overlap_history)
-    @test last(overlap_history) > 0.5
+    (; u, v) = latents
+    (; û_history, v̂_history, converged) = run_amp(rng; observations, csbm)
+    @test converged
+    first_q = overlaps(; u, v, û=û_history[:, begin], v̂=v̂_history[:, begin])
+    last_q = overlaps(; u, v, û=û_history[:, end], v̂=v̂_history[:, end])
+    if test_u
+        @test last_q.qᵤ > first_q.qᵤ
+        @test last_q.qᵤ > 0.5
+    end
+    if test_v
+        @test last_q.qᵥ > first_q.qᵥ
+        @test last_q.qᵥ > 0.5
+    end
     return nothing
 end
 
 function test_jet(csbm::ContextualSBM)
+    rng = default_rng()
     (; observations) = rand(rng, csbm)
     @test_opt target_modules = (StochasticBlockModelVariants,) run_amp(
-        rng; observations, csbm, iterations=2
+        rng; observations, csbm, max_iterations=2
     )
     @test_call target_modules = (StochasticBlockModelVariants,) run_amp(
-        rng; observations, csbm, iterations=2
+        rng; observations, csbm, max_iterations=2
     )
     return nothing
 end
 
 function test_allocations(csbm::ContextualSBM)
+    rng = default_rng()
     (; observations) = rand(rng, csbm)
-    (; storage, next_storage, temp_storage) = init_amp(
+    (; marginals, next_marginals, storage) = init_amp(
         rng; observations, csbm, init_std=1e-3
     )
-    alloc = @allocated update_amp!(next_storage, temp_storage; storage, observations, csbm)
+    alloc = @allocated update_amp!(next_marginals, storage; marginals, observations, csbm)
     @test alloc == 0
     return nothing
 end
@@ -40,8 +50,8 @@ end
 @testset "Correct code" begin
     test_recovery(ContextualSBM(; N=10^3, P=10^3, d=5, λ=2, μ=2, ρ=0.0))  # AMP-BP
     test_recovery(ContextualSBM(; N=10^3, P=10^3, d=5, λ=0, μ=2, ρ=0.0))  # AMP
-    test_recovery(ContextualSBM(; N=10^3, P=10^3, d=5, λ=2, μ=0, ρ=0.0))  # BP
-    test_recovery(ContextualSBM(; N=10^2, P=10^2, d=5, λ=2, μ=0, ρ=0.5))  # semi-supervised
+    test_recovery(ContextualSBM(; N=10^3, P=10^3, d=5, λ=2, μ=0, ρ=0.0); test_v=false)  # BP
+    test_recovery(ContextualSBM(; N=10^2, P=10^2, d=5, λ=2, μ=2, ρ=0.5))  # semi-supervised
 end
 
 @testset "Good code" begin

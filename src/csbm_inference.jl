@@ -1,7 +1,7 @@
-## Storage
+## Marginals
 
 """
-    AMPStorage
+    AMPMarginals
 
 # Fields
 
@@ -9,25 +9,42 @@
 - `v̂::Vector`: posterior mean of `v`, length `P`
 - `χ₊e::Dict`: messages about the marginal distribution of `u`, size `(N, N)`
 """
-@kwdef struct AMPStorage{R<:Real}
+@kwdef struct AMPMarginals{R<:Real}
     û::Vector{R}
     v̂::Vector{R}
     χ₊e::Dict{Tuple{Int,Int},R}
 end
 
-function Base.copy(storage::AMPStorage)
-    return AMPStorage(; û=copy(storage.û), v̂=copy(storage.v̂), χ₊e=copy(storage.χ₊e))
+function Base.copy(marginals::AMPMarginals)
+    return AMPMarginals(;
+        û=copy(marginals.û), v̂=copy(marginals.v̂), χ₊e=copy(marginals.χ₊e)
+    )
 end
 
-function Base.copy!(storage_dest::AMPStorage, storage_source::AMPStorage)
-    storage_dest.û .= storage_source.û
-    storage_dest.v̂ .= storage_source.v̂
-    copy!(storage_dest.χ₊e, storage_source.χ₊e)
-    return storage_dest
+function Base.copy!(marginals_dest::AMPMarginals, marginals_source::AMPMarginals)
+    marginals_dest.û .= marginals_source.û
+    marginals_dest.v̂ .= marginals_source.v̂
+    copy!(marginals_dest.χ₊e, marginals_source.χ₊e)
+    return marginals_dest
+end
+
+function overlaps(;
+    u::Vector{<:Integer}, v::Vector{R}, û::Vector{R}, v̂::Vector{R}
+) where {R}
+    û .= sign.(û)
+    û[abs.(û) .< eps(R)] .= one(R)
+
+    q̂ᵤ = max(freq_equalities(û, u), freq_equalities(û, -u))
+    qᵤ = 2 * (q̂ᵤ - one(R) / 2)
+
+    q̂ᵥ = max(abs(dot(v̂, v)), abs(dot(v̂, -v)))
+    qᵥ = q̂ᵥ / (eps(R) + norm(v̂) * norm(v))
+
+    return (; qᵤ, qᵥ)
 end
 
 """
-    AMPTempStorage
+    AMPStorage
 
 # Fields
 
@@ -37,7 +54,7 @@ end
 - `h̃₋::Vector`: individual external field for `u=-1`, length `N`
 - `χ₊::Vector`: marginal probability of `u=1`, length `N`
 """
-@kwdef struct AMPTempStorage{R<:Real}
+@kwdef struct AMPStorage{R<:Real}
     û_no_feat::Vector{R}
     v̂_no_comm::Vector{R}
     h̃₊::Vector{R}
@@ -45,13 +62,13 @@ end
     χ₊::Vector{R}
 end
 
-function Base.copy(temp_storage::AMPTempStorage)
-    return AMPTempStorage(;
-        û_no_feat=copy(temp_storage.û_no_feat),
-        v̂_no_comm=copy(temp_storage.v̂_no_comm),
-        h̃₊=copy(temp_storage.h̃₊),
-        h̃₋=copy(temp_storage.h̃₋),
-        χ₊=copy(temp_storage.χ₊),
+function Base.copy(storage::AMPStorage)
+    return AMPStorage(;
+        û_no_feat=copy(storage.û_no_feat),
+        v̂_no_comm=copy(storage.v̂_no_comm),
+        h̃₊=copy(storage.h̃₊),
+        h̃₋=copy(storage.h̃₋),
+        χ₊=copy(storage.χ₊),
     )
 end
 
@@ -66,32 +83,32 @@ function init_amp(
     (; N, P) = csbm
     (; g, Ξ) = observations
 
-    û = prior₊.(R, Ξ) + init_std .* randn(rng, R, N)
-    v̂ = 2 .* prior₊.(R, Ξ) .- one(R) .+ init_std .* randn(rng, R, P)
+    û = 2 .* prior₊.(R, Ξ) .- one(R) .+ init_std .* randn(rng, R, N)
+    v̂ = init_std .* randn(rng, R, P)
     χ₊e = Dict{Tuple{Int,Int},R}()
     for i in 1:N, j in neighbors(g, i)
-        χ₊e[i, j] = (one(R) / 2) + init_std * randn(rng, R)
+        χ₊e[i, j] = prior₊(R, Ξ[i]) + init_std * randn(rng, R)
     end
-    storage = AMPStorage(; û, v̂, χ₊e)
-    next_storage = copy(storage)
+    marginals = AMPMarginals(; û, v̂, χ₊e)
+    next_marginals = copy(marginals)
 
     û_no_feat = zeros(R, N)
     v̂_no_comm = zeros(R, P)
     h̃₊ = zeros(R, N)
     h̃₋ = zeros(R, N)
     χ₊ = zeros(R, N)
-    temp_storage = AMPTempStorage(; û_no_feat, v̂_no_comm, h̃₊, h̃₋, χ₊)
+    storage = AMPStorage(; û_no_feat, v̂_no_comm, h̃₊, h̃₋, χ₊)
 
-    return (; storage, next_storage, temp_storage)
+    return (; marginals, next_marginals, storage)
 end
 
 prior₊(::Type{R}, Ξᵢ) where {R} = Ξᵢ == 0 ? one(R) / 2 : R(Ξᵢ == 1)
 prior₋(::Type{R}, Ξᵢ) where {R} = Ξᵢ == 0 ? one(R) / 2 : R(Ξᵢ == -1)
 
 function update_amp!(
-    next_storage::AMPStorage{R},
-    temp_storage::AMPTempStorage{R};
-    storage::AMPStorage{R},
+    next_marginals::AMPMarginals{R},
+    storage::AMPStorage{R};
+    marginals::AMPMarginals{R},
     observations::ContextualSBMObservations{R},
     csbm::ContextualSBM{R},
 ) where {R}
@@ -99,9 +116,9 @@ function update_amp!(
     (; g, B, Ξ) = observations
     (; cᵢ, cₒ) = affinities(csbm)
 
-    ûᵗ, v̂ᵗ, χ₊eᵗ = storage.û, storage.v̂, storage.χ₊e
-    ûᵗ⁺¹, v̂ᵗ⁺¹, χ₊eᵗ⁺¹ = next_storage.û, next_storage.v̂, next_storage.χ₊e
-    (; û_no_feat, v̂_no_comm, h̃₊, h̃₋, χ₊) = temp_storage
+    ûᵗ, v̂ᵗ, χ₊eᵗ = marginals.û, marginals.v̂, marginals.χ₊e
+    ûᵗ⁺¹, v̂ᵗ⁺¹, χ₊eᵗ⁺¹ = next_marginals.û, next_marginals.v̂, next_marginals.χ₊e
+    (; û_no_feat, v̂_no_comm, h̃₊, h̃₋, χ₊) = storage
 
     ûₜ_sum = sum(ûᵗ)
     ûₜ_sum2 = sum(abs2, ûᵗ)
@@ -156,29 +173,52 @@ end
 
 function run_amp(
     rng::AbstractRNG;
-    observations::ContextualSBMObservations,
-    csbm::ContextualSBM,
+    observations::ContextualSBMObservations{R},
+    csbm::ContextualSBM{R},
     init_std::Real=1e-3,
-    iterations::Integer=10,
-    show_progress=false,
-)
-    (; storage, next_storage, temp_storage) = init_amp(rng; observations, csbm, init_std)
-    storage_history = [copy(storage)]
-    prog = Progress(iterations; desc="AMP-BP", enabled=show_progress)
-    for _ in 1:iterations
-        update_amp!(next_storage, temp_storage; storage, observations, csbm)
-        copy!(storage, next_storage)
-        push!(storage_history, copy(storage))
-        next!(prog)
-    end
-    return storage_history
-end
+    max_iterations::Integer=200,
+    convergence_threshold=1e-3,
+    recent_past=10,
+    show_progress::Bool=false,
+) where {R}
+    (; N, P) = csbm
+    (; marginals, next_marginals, storage) = init_amp(rng; observations, csbm, init_std)
 
-function overlap(; storage::AMPStorage, latents::ContextualSBMLatents)
-    û = sign.(storage.û)
-    @assert all(abs.(û) .> 0.5)
-    u = latents.u
-    q̂ᵤ = (1 / length(û)) * max(count_equalities(û, u), count_equalities(û, -u))
-    qᵤ = 2 * (q̂ᵤ - 0.5)
-    return qᵤ
+    û_history = Matrix{R}(undef, N, max_iterations)
+    v̂_history = Matrix{R}(undef, P, max_iterations)
+    converged = false
+    prog = Progress(max_iterations; desc="AMP-BP", enabled=show_progress)
+
+    for t in 1:max_iterations
+        update_amp!(next_marginals, storage; marginals, observations, csbm)
+        copy!(marginals, next_marginals)
+
+        û_history[:, t] .= marginals.û
+        v̂_history[:, t] .= marginals.v̂
+
+        if t <= recent_past
+            û_recent_std = typemax(R)
+            v̂_recent_std = typemax(R)
+        else
+            û_recent_std = maximum(std(view(û_history, :, (t - recent_past):t); dims=2))
+            v̂_recent_std = maximum(std(view(v̂_history, :, (t - recent_past):t); dims=2))
+        end
+        converged = (
+            û_recent_std < convergence_threshold && v̂_recent_std < convergence_threshold
+        )
+        if converged
+            û_history = û_history[:, 1:t]
+            v̂_history = v̂_history[:, 1:t]
+            break
+        else
+            showvalues = [
+                (:û_recent_std, û_recent_std),
+                (:v̂_recent_std, v̂_recent_std),
+                (:convergence_threshold, convergence_threshold),
+            ]
+            next!(prog; showvalues)
+        end
+    end
+
+    return (; û_history, v̂_history, converged)
 end

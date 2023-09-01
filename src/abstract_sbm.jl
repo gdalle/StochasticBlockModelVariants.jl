@@ -6,6 +6,20 @@ Abstract supertype for Stochastic Block Models with additional node features.
 abstract type AbstractSBM end
 
 """
+    length(sbm)
+
+Return the number of nodes `N` in the graph.
+"""
+Base.length
+
+"""
+    nb_features(sbm)
+
+Return the number of features for each node in the graph.
+"""
+function nb_features end
+
+"""
     average_degree(sbm)
 
 Return the average degre `d` of a node in the graph.
@@ -31,3 +45,58 @@ function affinities(sbm::AbstractSBM)
     cₒ = d - λ * sqrt(d)
     return (; cᵢ, cₒ)
 end
+
+"""
+    fraction_observed(sbm)
+
+Return the fraction `ρ` of community assignments that are observed.
+"""
+function fraction_observed end
+
+"""
+    sample_graph(rng, sbm, communities)
+
+Sample a graph `g` from an SBM based on known community assignments.
+"""
+function sample_graph(rng::AbstractRNG, sbm::AbstractSBM, communities::Vector{<:Integer})
+    N = length(sbm)
+    (; cᵢ, cₒ) = affinities(sbm)
+    Is, Js = Int[], Int[]
+    for i in 1:N, j in (i + 1):N
+        r = rand(rng)
+        if (
+            ((communities[i] == communities[j]) && (r < cᵢ / N)) ||
+            ((communities[i] != communities[j]) && (r < cₒ / N))
+        )
+            push!(Is, i)
+            push!(Is, j)
+            push!(Js, j)
+            push!(Js, i)
+        end
+    end
+    Vs = fill(true, length(Is))
+    A = sparse(Is, Js, Vs, N, N)
+    g = SimpleWeightedGraph(A)
+    return g
+end
+
+"""
+    sample_mask(rng, sbm, communities)
+
+Sample a vector `Ξ` (Xi) whose components are equal to the community assignments with probability `ρ` and equal to `missing` with probability `1-ρ`. 
+"""
+function sample_mask(rng::AbstractRNG, sbm::AbstractSBM, communities::Vector{<:Integer})
+    N = length(sbm)
+    ρ = fraction_observed(sbm)
+    Ξ = Vector{Union{Missing, Int}}(undef, N)
+    Ξ .= missing
+    for i in 1:N
+        if rand(rng) < ρ
+            Ξ[i] = communities[i]
+        end
+    end
+    return Ξ
+end
+
+prior₊(::Type{R}, Ξᵢ) where {R} = ismissing(Ξᵢ) ? one(R) / 2 : R(Ξᵢ == 1)
+prior₋(::Type{R}, Ξᵢ) where {R} = ismissing(Ξᵢ) ? one(R) / 2 : R(Ξᵢ == -1)

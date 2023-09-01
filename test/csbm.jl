@@ -4,7 +4,7 @@ using Statistics
 using StochasticBlockModelVariants
 using Test
 
-function test_recovery(csbm::ContextualSBM; test_u=true, test_v=true)
+function test_recovery(csbm::CSBM; test_u=true, test_v=true)
     rng = default_rng()
     @assert effective_snr(csbm) > 1
     (; latents, observations) = rand(rng, csbm)
@@ -24,7 +24,7 @@ function test_recovery(csbm::ContextualSBM; test_u=true, test_v=true)
     return nothing
 end
 
-function test_jet(csbm::ContextualSBM)
+function test_jet(csbm::CSBM)
     rng = default_rng()
     (; observations) = rand(rng, csbm)
     @test_opt target_modules = (StochasticBlockModelVariants,) run_amp(
@@ -36,7 +36,7 @@ function test_jet(csbm::ContextualSBM)
     return nothing
 end
 
-function test_allocations(csbm::ContextualSBM)
+function test_allocations(csbm::CSBM)
     rng = default_rng()
     (; observations) = rand(rng, csbm)
     (; marginals, next_marginals, storage) = init_amp(
@@ -48,13 +48,13 @@ function test_allocations(csbm::ContextualSBM)
 end
 
 @testset "Correct code" begin
-    test_recovery(ContextualSBM(; N=10^3, P=10^3, d=5, λ=2, μ=2, ρ=0.0))  # AMP-BP
-    test_recovery(ContextualSBM(; N=10^3, P=10^3, d=5, λ=0, μ=2, ρ=0.0))  # AMP
-    test_recovery(ContextualSBM(; N=10^3, P=10^3, d=5, λ=2, μ=0, ρ=0.0); test_v=false)  # BP
-    test_recovery(ContextualSBM(; N=10^2, P=10^2, d=5, λ=2, μ=2, ρ=0.5))  # semi-supervised
+    test_recovery(CSBM(; N=10^3, P=10^3, d=5, λ=2, μ=2, ρ=0.0))  # AMP-BP
+    test_recovery(CSBM(; N=10^3, P=10^3, d=5, λ=0, μ=2, ρ=0.0))  # AMP
+    test_recovery(CSBM(; N=10^3, P=10^3, d=5, λ=2, μ=0, ρ=0.0); test_v=false)  # BP
+    test_recovery(CSBM(; N=10^2, P=10^2, d=5, λ=2, μ=2, ρ=0.5))  # semi-supervised
 end
 
 @testset "Good code" begin
-    test_jet(ContextualSBM(; N=10^3, P=10^3, d=5, λ=2, μ=2, ρ=0.0))
-    test_allocations(ContextualSBM(; N=10^3, P=10^3, d=5, λ=2, μ=2, ρ=0.0))
+    test_jet(CSBM(; N=10^3, P=10^3, d=5, λ=2, μ=2, ρ=0.0))
+    test_allocations(CSBM(; N=10^3, P=10^3, d=5, λ=2, μ=2, ρ=0.0))
 end

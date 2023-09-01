@@ -16,7 +16,7 @@ function compute_fig1(; N=3 * 10^3, P=N ÷ 10, d=5, μ=2, ρ=0.1, λ_values=0:0.
     @threads for i in 1:trials
         for j in eachindex(λ_values)
             λ = λ_values[j]
-            csbm = ContextualSBM(; N, P, d, μ, λ, ρ)
+            csbm = CSBM(; N, P, d, μ, λ, ρ)
             (; qᵤ, qᵥ) = evaluate_amp(rng; csbm)
             qᵤ_values[i, j] = qᵤ
             qᵥ_values[i, j] = qᵥ

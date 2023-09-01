@@ -105,8 +105,8 @@ end
 
 Base.rand(rng::AbstractRNG, ::GaussianWeightPrior{R}) where {R} = randn(rng, R)
 
-fₐ(::RademacherWeightPrior{R}, Λ, Γ) where {R} = tanh(Γ)
-fᵥ(::RademacherWeightPrior{R}, Λ, Γ) where {R} = inv(abs2(cosh(Γ)))
+fₐ(::RademacherWeightPrior, Λ, Γ) = tanh(Γ)
+fᵥ(::RademacherWeightPrior, Λ, Γ) = inv(abs2(cosh(Γ)))
 
-fₐ(::GaussianWeightPrior{R}, Λ, Γ) where {R} = Γ / (Λ + 1)
-fᵥ(::GaussianWeightPrior{R}, Λ, Γ) where {R} = 1 / (Λ + 1)
+fₐ(::GaussianWeightPrior, Λ, Γ) = Γ / (Λ + 1)
+fᵥ(::GaussianWeightPrior, Λ, Γ) = 1 / (Λ + 1)

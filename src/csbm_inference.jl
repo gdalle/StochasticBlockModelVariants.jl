@@ -1,7 +1,7 @@
 ## Marginals
 
 """
-    AMPMarginalsCSBM
+    MarginalsCSBM
 
 # Fields
 
@@ -11,41 +11,41 @@
 - `v̂_no_comm::Vector`: posterior mean of `v` if there were no communities, length `P` (aka `Bᵤ`)
 - `h̃₊::Vector`: individual external field for `u=1`, length `N`
 - `h̃₋::Vector`: individual external field for `u=-1`, length `N`
-- `χ₊e::Dict`: messages about the marginal distribution of `u`, size `(N, N)`
+- `χe₊::Dict`: messages about the marginal distribution of `u`, size `(N, N)`
 - `χ₊::Vector`: marginal probability of `u=1`, length `N`
 """
-@kwdef struct AMPMarginalsCSBM{R<:Real}
+@kwdef struct MarginalsCSBM{R<:Real}
     û::Vector{R}
     v̂::Vector{R}
     û_no_feat::Vector{R}
     v̂_no_comm::Vector{R}
     h̃₊::Vector{R}
     h̃₋::Vector{R}
-    χ₊e::Dict{Tuple{Int,Int},R}
+    χe₊::Dict{Tuple{Int,Int},R}
     χ₊::Vector{R}
 end
 
-function Base.copy(marginals::AMPMarginalsCSBM)
-    return AMPMarginalsCSBM(;
+function Base.copy(marginals::MarginalsCSBM)
+    return MarginalsCSBM(;
         û=copy(marginals.û),
         v̂=copy(marginals.v̂),
         û_no_feat=copy(marginals.û_no_feat),
         v̂_no_comm=copy(marginals.v̂_no_comm),
         h̃₊=copy(marginals.h̃₊),
         h̃₋=copy(marginals.h̃₋),
-        χ₊e=copy(marginals.χ₊e),
+        χe₊=copy(marginals.χe₊),
         χ₊=copy(marginals.χ₊),
     )
 end
 
-function Base.copy!(marginals_dest::AMPMarginalsCSBM, marginals_source::AMPMarginalsCSBM)
+function Base.copy!(marginals_dest::MarginalsCSBM, marginals_source::MarginalsCSBM)
     copy!(marginals_dest.û, marginals_source.û),
     copy!(marginals_dest.v̂, marginals_source.v̂),
     copy!(marginals_dest.û_no_feat, marginals_source.û_no_feat),
     copy!(marginals_dest.v̂_no_comm, marginals_source.v̂_no_comm),
     copy!(marginals_dest.h̃₊, marginals_source.h̃₊),
     copy!(marginals_dest.h̃₋, marginals_source.h̃₋),
-    copy!(marginals_dest.χ₊e, marginals_source.χ₊e),
+    copy!(marginals_dest.χe₊, marginals_source.χe₊),
     copy!(marginals_dest.χ₊, marginals_source.χ₊),
     return marginals_dest
 end
@@ -60,42 +60,42 @@ function init_amp(
 
     û = 2 .* prior₊.(R, Ξ) .- one(R) .+ init_std .* randn(rng, R, N)
     v̂ = init_std .* randn(rng, R, P)
-    
+
     û_no_feat = zeros(R, N)
     v̂_no_comm = zeros(R, P)
-    
+
     h̃₊ = zeros(R, N)
     h̃₋ = zeros(R, N)
-    
-    χ₊e = Dict{Tuple{Int,Int},R}()
+
+    χe₊ = Dict{Tuple{Int,Int},R}()
     for i in 1:N, j in neighbors(g, i)
-        χ₊e[i, j] = prior₊(R, Ξ[i]) + init_std * randn(rng, R)
+        χe₊[i, j] = prior₊(R, Ξ[i]) + init_std * randn(rng, R)
     end
     χ₊ = zeros(R, N)
-    
-    marginals = AMPMarginalsCSBM(; û, v̂, û_no_feat, v̂_no_comm, h̃₊, h̃₋, χ₊e, χ₊)
+
+    marginals = MarginalsCSBM(; û, v̂, û_no_feat, v̂_no_comm, h̃₊, h̃₋, χe₊, χ₊)
     next_marginals = copy(marginals)
     return (; marginals, next_marginals)
 end
 
 function update_amp!(
-    next_marginals::AMPMarginalsCSBM{R};
-    marginals::AMPMarginalsCSBM{R},
+    next_marginals::MarginalsCSBM{R};
+    marginals::MarginalsCSBM{R},
     observations::ObservationsCSBM{R},
     csbm::CSBM{R},
 ) where {R}
     (; d, λ, μ, N, P) = csbm
-    (; g, B, Ξ) = observations
+    (; g, Ξ, B) = observations
     (; cᵢ, cₒ) = affinities(csbm)
 
-    ûᵗ, v̂ᵗ, χ₊eᵗ = marginals.û, marginals.v̂, marginals.χ₊e
-    ûᵗ⁺¹, v̂ᵗ⁺¹, χ₊eᵗ⁺¹ = next_marginals.û, next_marginals.v̂, next_marginals.χ₊e
+    ûᵗ, v̂ᵗ, χe₊ᵗ = marginals.û, marginals.v̂, marginals.χe₊
+    ûᵗ⁺¹, v̂ᵗ⁺¹, χe₊ᵗ⁺¹ = next_marginals.û, next_marginals.v̂, next_marginals.χe₊
     (; û_no_feat, v̂_no_comm, h̃₊, h̃₋, χ₊) = next_marginals
 
     ûₜ_sum = sum(ûᵗ)
     ûₜ_sum2 = sum(abs2, ûᵗ)
 
-    # CSBMAMP estimation of v
+    # AMP estimation of v
     σᵥ_no_comm = (μ / N) * ûₜ_sum2
     mul!(v̂_no_comm, B, ûᵗ)
     v̂_no_comm .*= sqrt(μ / N)
@@ -118,7 +118,7 @@ function update_amp!(
     for i in 1:N
         s_i = h̃₊[i] - h̃₋[i]
         for k in neighbors(g, i)
-            common = 2λ * sqrt(d) * χ₊eᵗ[k, i]
+            common = 2λ * sqrt(d) * χe₊ᵗ[k, i]
             s_i += log((cₒ + common) / (cᵢ - common))
         end
         χ₊[i] = s_i
@@ -126,15 +126,15 @@ function update_amp!(
 
     # BP update of the messages
     for i in 1:N, j in neighbors(g, i)
-        common = 2λ * sqrt(d) * χ₊eᵗ[j, i]
+        common = 2λ * sqrt(d) * χe₊ᵗ[j, i]
         s_ij = log((cₒ + common) / (cᵢ - common))
-        χ₊eᵗ⁺¹[i, j] = χ₊[i] - s_ij
+        χe₊ᵗ⁺¹[i, j] = χ₊[i] - s_ij
     end
 
     # Sigmoidize probabilities
     χ₊ .= sigmoid.(χ₊)
-    for (key, val) in pairs(χ₊eᵗ⁺¹)
-        χ₊eᵗ⁺¹[key] = sigmoid(val)
+    for (key, val) in pairs(χe₊ᵗ⁺¹)
+        χe₊ᵗ⁺¹[key] = sigmoid(val)
     end
 
     # BP estimation of u

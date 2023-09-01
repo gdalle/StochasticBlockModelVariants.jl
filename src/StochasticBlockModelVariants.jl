@@ -7,6 +7,7 @@ using PrecompileTools: @compile_workload
 using ProgressMeter: Progress, next!
 using Random: AbstractRNG, default_rng
 using SimpleWeightedGraphs: SimpleWeightedGraph
+using SpecialFunctions: erf
 using Statistics: mean, std
 using SparseArrays: SparseMatrixCSC, sparse, findnz
 

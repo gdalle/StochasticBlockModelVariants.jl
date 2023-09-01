@@ -14,6 +14,7 @@ export affinities, effective_snr
 export overlaps
 export init_amp, update_amp!, run_amp, evaluate_amp
 
+include("abstract_sbm.jl")
 include("utils.jl")
 include("csbm.jl")
 include("csbm_inference.jl")

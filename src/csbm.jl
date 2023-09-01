@@ -3,7 +3,7 @@
 """
     ContextualSBM
 
-A generative model for graphs with node features, which combines the Stochastic Block Model with a mixture of Gaussians.
+A generative model for graphs with node features, which combines a Stochastic Block Model with a mixture of Gaussians.
 
 Reference: <https://arxiv.org/abs/2306.07948>
 
@@ -16,7 +16,7 @@ Reference: <https://arxiv.org/abs/2306.07948>
 - `μ`: SNR of the features
 - `ρ`: fraction of nodes revealed
 """
-struct ContextualSBM{R<:Real}
+struct ContextualSBM{R<:Real} <: AbstractSBM
     N::Int
     P::Int
     d::R
@@ -32,6 +32,9 @@ struct ContextualSBM{R<:Real}
     end
 end
 
+average_degree(csbm::CSBM) = csbm.d
+communities_snr(csbm::CSBM) = csbm.λ
+
 """
     effective_snr(csbm)
 
@@ -42,17 +45,6 @@ function effective_snr(csbm::ContextualSBM)
     return abs2(λ) + abs2(μ) / (N / P)
 end
 
-"""
-    affinities(csbm)
-
-Return a named tuple `(; cᵢ, cₒ)` containing the affinities inside and outside of a community.
-"""
-function affinities(csbm::ContextualSBM)
-    (; d, λ) = csbm
-    cᵢ = d + λ * sqrt(d)
-    cₒ = d - λ * sqrt(d)
-    return (; cᵢ, cₒ)
-end
 
 ## Latents
 

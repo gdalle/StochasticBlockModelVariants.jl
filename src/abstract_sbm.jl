@@ -46,6 +46,19 @@ function affinities(sbm::AbstractSBM)
     return (; cᵢ, cₒ)
 end
 
+struct AffinityMatrix{R}
+    cᵢ::R
+    cₒ::R
+end
+
+function Base.getindex(C::AffinityMatrix, i, j)
+    if i == j
+        return C.cᵢ
+    else
+        return C.cₒ
+    end
+end
+
 """
     fraction_observed(sbm)
 
@@ -88,7 +101,7 @@ Sample a vector `Ξ` (Xi) whose components are equal to the community assignment
 function sample_mask(rng::AbstractRNG, sbm::AbstractSBM, communities::Vector{<:Integer})
     N = length(sbm)
     ρ = fraction_observed(sbm)
-    Ξ = Vector{Union{Missing, Int}}(undef, N)
+    Ξ = Vector{Union{Missing,Int}}(undef, N)
     Ξ .= missing
     for i in 1:N
         if rand(rng) < ρ
@@ -98,5 +111,4 @@ function sample_mask(rng::AbstractRNG, sbm::AbstractSBM, communities::Vector{<:I
     return Ξ
 end
 
-prior₊(::Type{R}, Ξᵢ) where {R} = ismissing(Ξᵢ) ? one(R) / 2 : R(Ξᵢ == 1)
-prior₋(::Type{R}, Ξᵢ) where {R} = ismissing(Ξᵢ) ? one(R) / 2 : R(Ξᵢ == -1)
+prior(::Type{R}, u, Ξᵢ) where {R} = ismissing(Ξᵢ) ? one(R) / 2 : R(Ξᵢ == u)

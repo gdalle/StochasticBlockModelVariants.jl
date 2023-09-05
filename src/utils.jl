@@ -16,3 +16,34 @@ function overlaps(;
 
     return (; qᵤ, qᵥ)
 end
+
+mutable struct PlusMinusMeasure{R}
+    p₊::R
+    p₋::R
+end
+
+PlusMinusMeasure(p) = PlusMinusMeasure(p, one(typeof(p)) - p)
+
+Base.copy(pmm::PlusMinusMeasure) = PlusMinusMeasure(pmm.p₊, pmm.p₋)
+
+function Base.getindex(pmm::PlusMinusMeasure, i)
+    if i == 1
+        return pmm.p₊
+    else
+        return pmm.p₋
+    end
+end
+
+function Base.setindex!(pmm::PlusMinusMeasure, v, i)
+    if i == 1
+        pmm.p₊ = v
+    else
+        pmm.p₋ = v
+    end
+end
+
+function LinearAlgebra.normalize!(pmm::PlusMinusMeasure)
+    s = pmm.p₊ + pmm.p₋
+    pmm.p₊ /= s
+    return pmm.p₋ /= s
+end

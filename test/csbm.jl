@@ -9,7 +9,7 @@ function test_recovery(csbm::CSBM; test_u=true, test_v=true)
     @assert effective_snr(csbm) > 1
     (; latents, observations) = rand(rng, csbm)
     (; u, v) = latents
-    (; û_history, v̂_history, converged) = run_amp(rng; observations, csbm)
+    (; û_history, v̂_history, converged) = run_amp(rng, observations, csbm)
     @test converged
     first_q = overlaps(; u, v, û=û_history[:, begin], v̂=v̂_history[:, begin])
     last_q = overlaps(; u, v, û=û_history[:, end], v̂=v̂_history[:, end])
@@ -28,10 +28,10 @@ function test_jet(csbm::CSBM)
     rng = default_rng()
     (; observations) = rand(rng, csbm)
     @test_opt target_modules = (StochasticBlockModelVariants,) run_amp(
-        rng; observations, csbm, max_iterations=2
+        rng, observations, csbm; max_iterations=2
     )
     @test_call target_modules = (StochasticBlockModelVariants,) run_amp(
-        rng; observations, csbm, max_iterations=2
+        rng, observations, csbm; max_iterations=2
     )
     return nothing
 end
@@ -39,10 +39,8 @@ end
 function test_allocations(csbm::CSBM)
     rng = default_rng()
     (; observations) = rand(rng, csbm)
-    (; marginals, next_marginals, storage) = init_amp(
-        rng; observations, csbm, init_std=1e-3
-    )
-    alloc = @allocated update_amp!(next_marginals, storage; marginals, observations, csbm)
+    (; marginals, next_marginals) = init_amp(rng, observations, csbm; init_std=1e-3)
+    alloc = @allocated update_amp!(next_marginals, marginals, observations, csbm)
     @test alloc == 0
     return nothing
 end

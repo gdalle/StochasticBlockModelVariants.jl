@@ -2,7 +2,7 @@ module StochasticBlockModelVariants
 
 using DensityInterface: logdensityof, densityof
 using Graphs: AbstractGraph, neighbors
-using LinearAlgebra: dot, mul!, norm
+using LinearAlgebra: LinearAlgebra, dot, mul!, norm, normalize!
 using PrecompileTools: @compile_workload
 using ProgressMeter: Progress, next!
 using Random: AbstractRNG, default_rng
@@ -22,6 +22,7 @@ include("utils.jl")
 include("csbm.jl")
 include("glmsbm.jl")
 include("csbm_inference.jl")
+include("glmsbm_inference.jl")
 
 # @compile_workload begin
 #     rng = default_rng()

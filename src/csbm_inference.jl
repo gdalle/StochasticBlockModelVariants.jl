@@ -53,12 +53,12 @@ end
 ## Message-passing
 
 function init_amp(
-    rng::AbstractRNG; observations::ObservationsCSBM{R}, csbm::CSBM{R}, init_std
+    rng::AbstractRNG, observations::ObservationsCSBM{R}, csbm::CSBM{R}; init_std
 ) where {R}
     (; N, P) = csbm
     (; g, Ξ) = observations
 
-    û = 2 .* prior₊.(R, Ξ) .- one(R) .+ init_std .* randn(rng, R, N)
+    û = 2 .* prior.(R, 1, Ξ) .- one(R) .+ init_std .* randn(rng, R, N)
     v̂ = init_std .* randn(rng, R, P)
 
     û_no_feat = zeros(R, N)
@@ -69,7 +69,7 @@ function init_amp(
 
     χe₊ = Dict{Tuple{Int,Int},R}()
     for i in 1:N, j in neighbors(g, i)
-        χe₊[i, j] = prior₊(R, Ξ[i]) + init_std * randn(rng, R)
+        χe₊[i, j] = prior(R, 1, Ξ[i]) + init_std * randn(rng, R)
     end
     χ₊ = zeros(R, N)
 
@@ -79,7 +79,7 @@ function init_amp(
 end
 
 function update_amp!(
-    next_marginals::MarginalsCSBM{R};
+    next_marginals::MarginalsCSBM{R},
     marginals::MarginalsCSBM{R},
     observations::ObservationsCSBM{R},
     csbm::CSBM{R},
@@ -111,8 +111,8 @@ function update_amp!(
     # Estimation of the field h
     h₊ = (one(R) / 2N) * (cᵢ * (N + ûₜ_sum) + cₒ * (N - ûₜ_sum))
     h₋ = (one(R) / 2N) * (cₒ * (N + ûₜ_sum) + cᵢ * (N - ûₜ_sum))
-    h̃₊ .= -h₊ .+ log.(prior₊.(R, Ξ)) .+ û_no_feat
-    h̃₋ .= -h₋ .+ log.(prior₋.(R, Ξ)) .- û_no_feat
+    h̃₊ .= -h₊ .+ log.(prior.(R, +1, Ξ)) .+ û_no_feat
+    h̃₋ .= -h₋ .+ log.(prior.(R, -1, Ξ)) .- û_no_feat
 
     # BP update of the marginals
     for i in 1:N
@@ -144,9 +144,9 @@ function update_amp!(
 end
 
 function run_amp(
-    rng::AbstractRNG;
+    rng::AbstractRNG,
     observations::ObservationsCSBM{R},
-    csbm::CSBM{R},
+    csbm::CSBM{R};
     init_std=1e-3,
     max_iterations=200,
     convergence_threshold=1e-3,
@@ -154,7 +154,7 @@ function run_amp(
     show_progress=false,
 ) where {R}
     (; N, P) = csbm
-    (; marginals, next_marginals) = init_amp(rng; observations, csbm, init_std)
+    (; marginals, next_marginals) = init_amp(rng, observations, csbm; init_std)
 
     û_history = Matrix{R}(undef, N, max_iterations)
     v̂_history = Matrix{R}(undef, P, max_iterations)
@@ -162,7 +162,7 @@ function run_amp(
     prog = Progress(max_iterations; desc="AMP-BP for CSBM", enabled=show_progress)
 
     for t in 1:max_iterations
-        update_amp!(next_marginals; marginals, observations, csbm)
+        update_amp!(next_marginals, marginals, observations, csbm)
         copy!(marginals, next_marginals)
 
         û_history[:, t] .= marginals.û
@@ -197,7 +197,7 @@ end
 
 function evaluate_amp(rng::AbstractRNG; csbm::CSBM, kwargs...)
     (; latents, observations) = rand(rng, csbm)
-    (; û_history, v̂_history, converged) = run_amp(rng; observations, csbm, kwargs...)
+    (; û_history, v̂_history, converged) = run_amp(rng, observations, csbm; kwargs...)
     (; qᵤ, qᵥ) = overlaps(;
         u=latents.u, v=latents.v, û=û_history[:, end], v̂=v̂_history[:, end]
     )

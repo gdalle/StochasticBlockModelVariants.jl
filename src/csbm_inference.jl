@@ -152,7 +152,7 @@ function run_amp(
     observations::ObservationsCSBM,
     csbm::CSBM;
     init_std=1e-3,
-    max_iterations=200,
+    max_iterations=100,
     convergence_threshold=1e-3,
     recent_past=10,
     show_progress=false,
@@ -177,8 +177,8 @@ function run_amp(
             û_recent_std = typemax(R)
             v̂_recent_std = typemax(R)
         else
-            û_recent_std = maximum(std(view(û_history, :, (t - recent_past):t); dims=2))
-            v̂_recent_std = maximum(std(view(v̂_history, :, (t - recent_past):t); dims=2))
+            û_recent_std = mean(std(view(û_history, :, (t - recent_past):t); dims=2))
+            v̂_recent_std = mean(std(view(v̂_history, :, (t - recent_past):t); dims=2))
         end
         converged = (
             û_recent_std < convergence_threshold && v̂_recent_std < convergence_threshold
@@ -203,7 +203,7 @@ end
 function evaluate_amp(rng::AbstractRNG, csbm::CSBM; kwargs...)
     (; latents, observations) = rand(rng, csbm)
     (; û_history, v̂_history, converged) = run_amp(rng, observations, csbm; kwargs...)
-    qᵤ = discrete_overlap(latents.u, û_history[:, end])
-    qᵥ = continuous_overlap(latents.v, v̂_history[:, end])
-    return (; qᵤ, qᵥ)
+    q_dis = discrete_overlap(latents.u, û_history[:, end])
+    q_cont = continuous_overlap(latents.v, v̂_history[:, end])
+    return (; q_dis, q_cont, converged)
 end

@@ -66,7 +66,7 @@ end
 ind(s) = mod(s, 3)  # sends 1 to 1 and -1 to 2
 
 function init_amp(
-    rng::AbstractRNG; observations::ObservationsGLMSBM{R1}, glmsbm::GLMSBM{R2}, init_std::R3
+    rng::AbstractRNG, observations::ObservationsGLMSBM{R1}, glmsbm::GLMSBM{R2}; init_std::R3
 ) where {R1,R2,R3}
     R = promote_type(R1, R2, R3)
     (; N, M) = glmsbm
@@ -96,7 +96,7 @@ function init_amp(
 end
 
 function update_amp!(
-    next_marginals::MarginalsGLMSBM{R};
+    next_marginals::MarginalsGLMSBM{R},
     marginals::MarginalsGLMSBM{R},
     observations::ObservationsGLMSBM,
     glmsbm::GLMSBM,
@@ -143,38 +143,21 @@ function update_amp!(
     end
     @views gₒᵗ⁺¹ = gₒ.(ωᵗ⁺¹, χlᵗ[1, :], Ref(Vᵗ⁺¹))
     Λᵗ⁺¹ = sum(abs2, gₒᵗ⁺¹) / M
-    mul!(Γᵗ⁺¹, F, gₒᵗ⁺¹)
+    mul!(Γᵗ⁺¹, F', gₒᵗ⁺¹)
     Γᵗ⁺¹ .+= Λᵗ⁺¹ .* ŵᵗ
 
     # AMP update of the estimated marginals a, v
-    ŵᵗ⁺¹ .= fₐ.(Ref(Pʷ), Ref(Λᵗ⁺¹), Γᵗ⁺¹)
-    vᵗ⁺¹ .= fᵥ.(Ref(Pʷ), Ref(Λᵗ⁺¹), Γᵗ⁺¹)
+    ŵᵗ⁺¹ .= fₐ.(Ref(Pʷ), Λᵗ⁺¹, Γᵗ⁺¹)
+    vᵗ⁺¹ .= fᵥ.(Ref(Pʷ), Λᵗ⁺¹, Γᵗ⁺¹)
 
     # BP update of the field h
     hᵗ⁺¹ = Vector{R}(undef, 2)
     for s in (-1, 1)
-        hᵗ⁺¹[ind(s)] = sum(
-            C[ind(s), ind(sμ)] * χᵗ[ind(sμ), μ] for μ in 1:N for sμ in (-1, 1)
-        )
+        hᵗ⁺¹[ind(s)] =
+            sum(C[ind(s), ind(sμ)] * χᵗ[ind(sμ), μ] for μ in 1:N for sμ in (-1, 1)) / N
     end
 
     # BP update of the messages χe and of the marginals χ
-    for μ in 1:N, ν in neighbors(g, μ)
-        for sμ in (-1, 1)
-            χeᵗ⁺¹[ind(sμ), μ, ν] =
-                prior(R, sμ, Ξ[μ]) * exp(-hᵗ⁺¹[ind(sμ)]) * ψlᵗ⁺¹[ind(sμ), μ]
-            for η in neighbors(g, μ)
-                if η != ν
-                    χeᵗ⁺¹[ind(sμ), μ, ν] *= sum(
-                        C[ind(sη), ind(sμ)] * χeᵗ[ind(sη), η, μ] for sη in (-1, 1)
-                    )
-                end
-            end
-        end
-        normalization = χeᵗ⁺¹[1, μ, ν] + χeᵗ⁺¹[2, μ, ν]
-        χeᵗ⁺¹[1, μ, ν] /= normalization
-        χeᵗ⁺¹[2, μ, ν] /= normalization
-    end
 
     for μ in 1:N
         for sμ in (-1, 1)
@@ -186,6 +169,16 @@ function update_amp!(
             end
         end
         @views χᵗ⁺¹[:, μ] ./= sum(χᵗ⁺¹[:, μ])
+    end
+
+    for μ in 1:N, ν in neighbors(g, μ)
+        for sμ in (-1, 1)
+            extra_factor = sum(C[ind(sν), ind(sμ)] * χeᵗ[ind(sν), ν, μ] for sν in (-1, 1))
+            χeᵗ⁺¹[ind(sμ), μ, ν] = χᵗ⁺¹[ind(sμ), μ] / extra_factor
+        end
+        normalization = χeᵗ⁺¹[1, μ, ν] + χeᵗ⁺¹[2, μ, ν]
+        χeᵗ⁺¹[1, μ, ν] /= normalization
+        χeᵗ⁺¹[2, μ, ν] /= normalization
     end
 
     # BP update of the SBM-to-GLM messages χl
@@ -201,7 +194,7 @@ function update_amp!(
         @views χlᵗ⁺¹[:, μ] ./= sum(χlᵗ⁺¹[:, μ])
     end
 
-    @views ᵗ⁺¹ .= 2 .* χ[1, :] .- one(R)
+    @views ŝᵗ⁺¹ .= 2 .* χᵗ⁺¹[1, :] .- one(R)
 
     return nothing
 end
@@ -211,13 +204,13 @@ function run_amp(
     observations::ObservationsGLMSBM,
     glmsbm::GLMSBM;
     init_std=1e-3,
-    max_iterations=200,
+    max_iterations=100,
     convergence_threshold=1e-3,
     recent_past=10,
     show_progress=false,
 )
-    (; N, M) = csbm
-    (; marginals, next_marginals) = init_amp(rng; observations, glmsbm, init_std)
+    (; N, M) = glmsbm
+    (; marginals, next_marginals) = init_amp(rng, observations, glmsbm; init_std)
 
     R = eltype(marginals)
     ŝ_history = Matrix{R}(undef, N, max_iterations)
@@ -226,7 +219,7 @@ function run_amp(
     prog = Progress(max_iterations; desc="AMP-BP for GLM-SBM", enabled=show_progress)
 
     for t in 1:max_iterations
-        update_amp!(next_marginals; marginals, observations, glmsbm)
+        update_amp!(next_marginals, marginals, observations, glmsbm)
         copy!(marginals, next_marginals)
 
         ŝ_history[:, t] .= marginals.ŝ
@@ -236,8 +229,8 @@ function run_amp(
             ŝ_recent_std = typemax(R)
             ŵ_recent_std = typemax(R)
         else
-            ŝ_recent_std = maximum(std(view(ŝ_history, :, (t - recent_past):t); dims=2))
-            ŵ_recent_std = maximum(std(view(ŵ_history, :, (t - recent_past):t); dims=2))
+            ŝ_recent_std = mean(std(view(ŝ_history, :, (t - recent_past):t); dims=2))
+            ŵ_recent_std = mean(std(view(ŵ_history, :, (t - recent_past):t); dims=2))
         end
         converged = (
             ŝ_recent_std < convergence_threshold && ŵ_recent_std < convergence_threshold
@@ -261,8 +254,8 @@ end
 
 function evaluate_amp(rng::AbstractRNG, glmsbm::GLMSBM; kwargs...)
     (; latents, observations) = rand(rng, glmsbm)
-    (; ŝ_history, ŵ_history, converged) = run_amp(rng, observations, csbm; kwargs...)
-    qᵤ = discrete_overlap(latents.s, ŝ_history[:, end])
-    qᵥ = continuous_overlap(latents.w, ŵ_history[:, end])
-    return (; qᵤ, qᵥ)
+    (; ŝ_history, ŵ_history, converged) = run_amp(rng, observations, glmsbm; kwargs...)
+    q_dis = discrete_overlap(latents.s, ŝ_history[:, end])
+    q_cont = continuous_overlap(latents.w, ŵ_history[:, end])
+    return (; q_dis, q_cont, converged)
 end

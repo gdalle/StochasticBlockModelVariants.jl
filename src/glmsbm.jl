@@ -71,7 +71,7 @@ $(TYPEDFIELDS)
     g::G
     "revealed communities `±1` for a fraction `ρ` of nodes and `missing` for the rest, ngth `N`"
     Ξ::Vector{Union{Int,Missing}}
-    "feature matrix, size `(M, N)`"
+    "feature matrix, size `(N, M)`"
     F::Matrix{R}
 end
 
@@ -85,7 +85,7 @@ Sample from a [`GLMSBM`](@ref) and return a named tuple `(; latents, observation
 function Base.rand(rng::AbstractRNG, glmsbm::GLMSBM)
     (; N, M, ρ, Pʷ) = glmsbm
 
-    F = randn(rng, M, N) ./ sqrt(M)
+    F = randn(rng, N, M) ./ sqrt(M)
 
     w = [rand(Pʷ) for l in 1:M]
     s = round.(Int, sign.(F * w))
@@ -102,6 +102,9 @@ end
 
 struct RademacherWeightPrior{R} end
 struct GaussianWeightPrior{R} end
+
+RademacherWeightPrior() = RademacherWeightPrior{Float64}()
+GaussianWeightPrior() = GaussianWeightPrior{Float64}()
 
 function Base.rand(rng::AbstractRNG, ::RademacherWeightPrior{R}) where {R}
     return rand(rng, (-one(R), +one(R)))

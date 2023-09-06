@@ -28,7 +28,15 @@ using Test
         doctest(StochasticBlockModelVariants)
     end
 
-    @testset verbose = true "C SBM" begin
-        include("csbm.jl")
+    @testset verbose = true "JET" begin
+        include("jet.jl")
+    end
+
+    @testset verbose = true "Allocations" begin
+        include("allocations.jl")
+    end
+
+    @testset verbose = true "Recovery" begin
+        include("recovery.jl")
     end
 end

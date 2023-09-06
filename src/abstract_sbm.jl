@@ -105,13 +105,17 @@ sigmoid(x) = 1 / (1 + exp(-x))
 freq_equalities(x, y) = mean(x[i] ≈ y[i] for i in eachindex(x, y))
 
 function discrete_overlap(u, û)
-    q̂ᵤ = max(freq_equalities(û, u), freq_equalities(û, -u))
+    R = eltype(û)
+    û_sign = sign.(û)
+    û_sign[abs.(û) .< eps(R)] .= 1
+    q̂ᵤ = max(freq_equalities(u, û_sign), freq_equalities(u, -û_sign))
     qᵤ = 2 * (q̂ᵤ - one(R) / 2)
     return qᵤ
 end
 
 function continuous_overlap(v, v̂)
+    R = eltype(v)
     q̂ᵥ = max(abs(dot(v̂, v)), abs(dot(v̂, -v)))
-    qᵥ = q̂ᵥ / (eps() + norm(v̂) * norm(v))
+    qᵥ = q̂ᵥ / (eps(R) + norm(v̂) * norm(v))
     return qᵥ
 end

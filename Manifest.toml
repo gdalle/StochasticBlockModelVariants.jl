@@ -2,7 +2,7 @@
 
 julia_version = "1.10.0-beta2"
 manifest_format = "2.0"
-project_hash = "ba25bdf8dd9a1a3a609260b65801f3325dbdaa20"
+project_hash = "06fe3f2e3a2d6f17958684cbeb77c96e1e718454"
 
 [[deps.ArgTools]]
 uuid = "0dad84c5-d112-42e6-8d28-ef12dabb789f"
@@ -75,12 +75,6 @@ git-tree-sha1 = "1cf1d7dcb4bc32d7b4a5add4232db3750c27ecb4"
 uuid = "86223c79-3864-5bf0-83f7-82e725a168b6"
 version = "1.8.0"
 
-[[deps.Infiltrator]]
-deps = ["InteractiveUtils", "Markdown", "REPL", "UUIDs"]
-git-tree-sha1 = "04de041e4590428cccbb026d86e5d670513be2e3"
-uuid = "5903a43b-9cc3-4c30-8d17-598619ec4e9b"
-version = "1.6.4"
-
 [[deps.Inflate]]
 git-tree-sha1 = "5cd07aab533df5170988219191dfad0519391428"
 uuid = "d25df0c9-e2be-5dd7-82c8-3ad0b3e990b9"
@@ -148,12 +142,6 @@ version = "0.3.26"
     ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
     ChangesOfVariables = "9e997f8a-9a97-42d5-a9f1-ce6bfc15e2c0"
     InverseFunctions = "3587e190-3f89-42d0-90ee-14403ec27112"
-
-[[deps.LogarithmicNumbers]]
-deps = ["Random"]
-git-tree-sha1 = "8522befb54ff3b4bcf17d57b14b884d536a22015"
-uuid = "aa2f6b4e-9042-5d33-9679-40d3a6b85899"
-version = "1.2.1"
 
 [[deps.Logging]]
 uuid = "56ddb016-857b-54e1-b83d-db4d58db5568"

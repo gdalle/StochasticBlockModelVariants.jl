@@ -1,29 +1,32 @@
 ## Marginals
 
 """
-    MarginalsCSBM
+$(TYPEDEF)
 
 # Fields
 
-- `û::Vector`: posterior mean of `u`, length `N`
-- `v̂::Vector`: posterior mean of `v`, length `P`
-- `û_no_feat::Vector`: posterior mean of `u` if there were no features, length `N` (aka `Bᵥ`)
-- `v̂_no_comm::Vector`: posterior mean of `v` if there were no communities, length `P` (aka `Bᵤ`)
-- `h̃₊::Vector`: individual external field for `u=1`, length `N`
-- `h̃₋::Vector`: individual external field for `u=-1`, length `N`
-- `χe₊::Dict`: messages about the marginal distribution of `u`, size `(N, N)`
-- `χ₊::Vector`: marginal probability of `u=1`, length `N`
+$(TYPEDFIELDS)
 """
-@kwdef struct MarginalsCSBM{R<:Real}
+@kwdef struct MarginalsCSBM{R}
+    "posterior mean of `u`, length `N`"
     û::Vector{R}
+    "posterior mean of `v`, length `P`"
     v̂::Vector{R}
+    "posterior mean of `u` if there were no features, length `N` (aka `Bᵥ`)"
     û_no_feat::Vector{R}
+    "posterior mean of `v` if there were no communities, length `P` (aka `Bᵤ`)"
     v̂_no_comm::Vector{R}
+    "individual external field for `u=1`, length `N`"
     h̃₊::Vector{R}
+    "individual external field for `u=-1`, length `N`"
     h̃₋::Vector{R}
+    "messages about the marginal distribution of `u`, size `(N, N)`"
     χe₊::Dict{Tuple{Int,Int},R}
+    "marginal probability of `u=1`, length `N`"
     χ₊::Vector{R}
 end
+
+Base.eltype(::MarginalsCSBM{R}) where {R} = R
 
 function Base.copy(marginals::MarginalsCSBM)
     return MarginalsCSBM(;
@@ -53,8 +56,9 @@ end
 ## Message-passing
 
 function init_amp(
-    rng::AbstractRNG, observations::ObservationsCSBM{R}, csbm::CSBM{R}; init_std
-) where {R}
+    rng::AbstractRNG, observations::ObservationsCSBM{R1}, csbm::CSBM{R2}; init_std::R3
+) where {R1,R2,R3}
+    R = promote_type(R1, R2, R3)
     (; N, P) = csbm
     (; g, Ξ) = observations
 
@@ -81,8 +85,8 @@ end
 function update_amp!(
     next_marginals::MarginalsCSBM{R},
     marginals::MarginalsCSBM{R},
-    observations::ObservationsCSBM{R},
-    csbm::CSBM{R},
+    observations::ObservationsCSBM,
+    csbm::CSBM,
 ) where {R}
     (; d, λ, μ, N, P) = csbm
     (; g, Ξ, B) = observations
@@ -145,17 +149,18 @@ end
 
 function run_amp(
     rng::AbstractRNG,
-    observations::ObservationsCSBM{R},
-    csbm::CSBM{R};
+    observations::ObservationsCSBM,
+    csbm::CSBM;
     init_std=1e-3,
     max_iterations=200,
     convergence_threshold=1e-3,
     recent_past=10,
     show_progress=false,
-) where {R}
+)
     (; N, P) = csbm
     (; marginals, next_marginals) = init_amp(rng, observations, csbm; init_std)
 
+    R = eltype(marginals)
     û_history = Matrix{R}(undef, N, max_iterations)
     v̂_history = Matrix{R}(undef, P, max_iterations)
     converged = false
@@ -195,11 +200,10 @@ function run_amp(
     return (; û_history, v̂_history, converged)
 end
 
-function evaluate_amp(rng::AbstractRNG; csbm::CSBM, kwargs...)
+function evaluate_amp(rng::AbstractRNG, csbm::CSBM; kwargs...)
     (; latents, observations) = rand(rng, csbm)
     (; û_history, v̂_history, converged) = run_amp(rng, observations, csbm; kwargs...)
-    (; qᵤ, qᵥ) = overlaps(;
-        u=latents.u, v=latents.v, û=û_history[:, end], v̂=v̂_history[:, end]
-    )
+    qᵤ = discrete_overlap(latents.u, û_history[:, end])
+    qᵥ = continuous_overlap(latents.v, v̂_history[:, end])
     return (; qᵤ, qᵥ)
 end

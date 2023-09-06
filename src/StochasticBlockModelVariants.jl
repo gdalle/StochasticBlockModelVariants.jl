@@ -1,7 +1,18 @@
+"""
+    StochasticBlockModelVariants
+
+A package for inference in SBMs with node features using message-passing algorithms.
+
+# Exports
+
+$(EXPORTS)
+"""
 module StochasticBlockModelVariants
 
 using DensityInterface: logdensityof, densityof
+using DocStringExtensions
 using Graphs: AbstractGraph, neighbors
+using Infiltrator
 using LinearAlgebra: LinearAlgebra, dot, mul!, norm, normalize!
 using PrecompileTools: @compile_workload
 using ProgressMeter: Progress, next!
@@ -18,7 +29,6 @@ export overlaps
 export init_amp, update_amp!, run_amp, evaluate_amp
 
 include("abstract_sbm.jl")
-include("utils.jl")
 include("csbm.jl")
 include("glmsbm.jl")
 include("csbm_inference.jl")

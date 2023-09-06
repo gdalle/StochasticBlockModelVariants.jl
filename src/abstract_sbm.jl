@@ -1,33 +1,33 @@
 """
-    AbstractSBM
+$(TYPEDEF)
 
 Abstract supertype for Stochastic Block Models with additional node features.
 """
 abstract type AbstractSBM end
 
 """
-    length(sbm)
+    length(sbm::AbstractSBM)
 
 Return the number of nodes `N` in the graph.
 """
 Base.length
 
 """
-    nb_features(sbm)
+    nb_features(sbm::AbstractSBM)
 
-Return the number of features for each node in the graph.
+Return the number of nodes `N` in the graph.
 """
 function nb_features end
 
 """
-    average_degree(sbm)
+    average_degree(sbm::AbstractSBM)
 
 Return the average degre `d` of a node in the graph.
 """
 function average_degree end
 
 """
-    communities_snr(sbm)
+    communities_snr(sbm::AbstractSBM)
 
 Return the signal-to-noise ratio `λ` of the communities in the graph.
 """
@@ -44,19 +44,6 @@ function affinities(sbm::AbstractSBM)
     cᵢ = d + λ * sqrt(d)
     cₒ = d - λ * sqrt(d)
     return (; cᵢ, cₒ)
-end
-
-struct AffinityMatrix{R}
-    cᵢ::R
-    cₒ::R
-end
-
-function Base.getindex(C::AffinityMatrix, i, j)
-    if i == j
-        return C.cᵢ
-    else
-        return C.cₒ
-    end
 end
 
 """
@@ -112,3 +99,19 @@ function sample_mask(rng::AbstractRNG, sbm::AbstractSBM, communities::Vector{<:I
 end
 
 prior(::Type{R}, u, Ξᵢ) where {R} = ismissing(Ξᵢ) ? one(R) / 2 : R(Ξᵢ == u)
+
+sigmoid(x) = 1 / (1 + exp(-x))
+
+freq_equalities(x, y) = mean(x[i] ≈ y[i] for i in eachindex(x, y))
+
+function discrete_overlap(u, û)
+    q̂ᵤ = max(freq_equalities(û, u), freq_equalities(û, -u))
+    qᵤ = 2 * (q̂ᵤ - one(R) / 2)
+    return qᵤ
+end
+
+function continuous_overlap(v, v̂)
+    q̂ᵥ = max(abs(dot(v̂, v)), abs(dot(v̂, -v)))
+    qᵥ = q̂ᵥ / (eps() + norm(v̂) * norm(v))
+    return qᵥ
+end

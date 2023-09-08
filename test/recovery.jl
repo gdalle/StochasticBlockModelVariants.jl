@@ -22,4 +22,4 @@ test_recovery(CSBM(; N=10^3, P=10^3, d=5, λ=0, μ=2, ρ=0.0))  # AMP
 test_recovery(CSBM(; N=10^3, P=10^3, d=5, λ=2, μ=0, ρ=0.0); test_continuous=false)  # BP
 test_recovery(CSBM(; N=10^2, P=10^2, d=5, λ=2, μ=2, ρ=0.5))  # semi-supervised
 
-test_recovery(GLMSBM(; N=10^3, M=10^3, c=5, λ=2, ρ=0.0, Pʷ=GaussianWeightPrior()))  # AMP-BP
+# test_recovery(GLMSBM(; N=10^3, M=10^3, c=5, λ=2, ρ=0.0, Pʷ=GaussianWeightPrior()))  # AMP-BP

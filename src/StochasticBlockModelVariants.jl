@@ -27,7 +27,9 @@ export CSBM, LatentsCSBM, ObservationsCSBM
 export GLMSBM, LatentsGLMSBM, ObservationsGLMSBM
 export GaussianWeightPrior, RademacherWeightPrior
 export init_amp, update_amp!, run_amp, evaluate_amp
+export discrete_overlap, continuous_overlap
 
+include("utils.jl")
 include("abstract_sbm.jl")
 include("csbm.jl")
 include("glmsbm.jl")

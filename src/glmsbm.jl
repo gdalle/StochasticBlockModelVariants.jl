@@ -113,12 +113,14 @@ end
 Base.rand(rng::AbstractRNG, ::GaussianWeightPrior{R}) where {R} = randn(rng, R)
 
 fₐ(::RademacherWeightPrior, Λ, Γ) = tanh(Γ)
-fᵥ(::RademacherWeightPrior, Λ, Γ) = inv(abs2(cosh(Γ)))
+
+fᵥ(::RademacherWeightPrior, Λ, Γ::R) where {R} = max(eps(R), inv(abs2(cosh(Γ))))
 
 fₐ(::GaussianWeightPrior, Λ, Γ) = Γ / (Λ + 1)
 fᵥ(::GaussianWeightPrior, Λ, Γ) = 1 / (Λ + 1)
 
 function gₒ(ω, χ₊, V)
     Znn = (1 + (2χ₊ - 1) * erf(ω / sqrt(2V))) / 2
+    Znn = max(eps(typeof(Znn)), Znn)
     return inv(sqrt(2π * V)) * (2χ₊ - 1) * exp(-ω^2 / (2V)) / Znn
 end

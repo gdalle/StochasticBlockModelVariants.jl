@@ -28,31 +28,6 @@ end
 
 Base.eltype(::MarginalsCSBM{R}) where {R} = R
 
-function Base.copy(marginals::MarginalsCSBM)
-    return MarginalsCSBM(;
-        û=copy(marginals.û),
-        v̂=copy(marginals.v̂),
-        û_no_feat=copy(marginals.û_no_feat),
-        v̂_no_comm=copy(marginals.v̂_no_comm),
-        h̃₊=copy(marginals.h̃₊),
-        h̃₋=copy(marginals.h̃₋),
-        χe₊=copy(marginals.χe₊),
-        χ₊=copy(marginals.χ₊),
-    )
-end
-
-function Base.copy!(marginals_dest::MarginalsCSBM, marginals_source::MarginalsCSBM)
-    copy!(marginals_dest.û, marginals_source.û),
-    copy!(marginals_dest.v̂, marginals_source.v̂),
-    copy!(marginals_dest.û_no_feat, marginals_source.û_no_feat),
-    copy!(marginals_dest.v̂_no_comm, marginals_source.v̂_no_comm),
-    copy!(marginals_dest.h̃₊, marginals_source.h̃₊),
-    copy!(marginals_dest.h̃₋, marginals_source.h̃₋),
-    copy!(marginals_dest.χe₊, marginals_source.χe₊),
-    copy!(marginals_dest.χ₊, marginals_source.χ₊),
-    return marginals_dest
-end
-
 ## Message-passing
 
 function init_amp(
@@ -78,7 +53,7 @@ function init_amp(
     χ₊ = zeros(R, N)
 
     marginals = MarginalsCSBM(; û, v̂, û_no_feat, v̂_no_comm, h̃₊, h̃₋, χe₊, χ₊)
-    next_marginals = copy(marginals)
+    next_marginals = deepcopy(marginals)
     return (; marginals, next_marginals)
 end
 
@@ -155,6 +130,7 @@ function run_amp(
     max_iterations=100,
     convergence_threshold=1e-3,
     recent_past=10,
+    damping=0.0,
     show_progress=false,
 )
     (; N, P) = csbm
@@ -168,7 +144,7 @@ function run_amp(
 
     for t in 1:max_iterations
         update_amp!(next_marginals, marginals, observations, csbm)
-        copy!(marginals, next_marginals)
+        copy_damp!(marginals, next_marginals; damping=(t == 1 ? zero(damping) : damping))
 
         û_history[:, t] .= marginals.û
         v̂_history[:, t] .= marginals.v̂

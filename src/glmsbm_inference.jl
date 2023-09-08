@@ -32,35 +32,6 @@ end
 
 Base.eltype(::MarginalsGLMSBM{R}) where {R} = R
 
-function Base.copy(marginals::MarginalsGLMSBM)
-    return MarginalsGLMSBM(;
-        ŝ=copy(marginals.ŝ),
-        ŵ=copy(marginals.ŵ),
-        v=copy(marginals.v),
-        Γ=copy(marginals.Γ),
-        ω=copy(marginals.ω),
-        gₒ=copy(marginals.gₒ),
-        ψl=copy(marginals.ψl),
-        χe=copy(marginals.χe),
-        χl=copy(marginals.χl),
-        χ=copy(marginals.χ),
-    )
-end
-
-function Base.copy!(marginals_dest::MarginalsGLMSBM, marginals_source::MarginalsGLMSBM)
-    copy!(marginals_dest.ŝ, marginals_source.ŝ)
-    copy!(marginals_dest.ŵ, marginals_source.ŵ)
-    copy!(marginals_dest.v, marginals_source.v)
-    copy!(marginals_dest.Γ, marginals_source.Γ)
-    copy!(marginals_dest.ω, marginals_source.ω)
-    copy!(marginals_dest.gₒ, marginals_source.gₒ)
-    copy!(marginals_dest.ψl, marginals_source.ψl)
-    copy!(marginals_dest.χe, marginals_source.χe)
-    copy!(marginals_dest.χl, marginals_source.χl)
-    copy!(marginals_dest.χ, marginals_source.χ)
-    return marginals_dest
-end
-
 ## Message-passing
 
 ind(s) = mod(s, 3)  # sends 1 to 1 and -1 to 2
@@ -91,7 +62,7 @@ function init_amp(
     χ = ones(R, 2, N) / 2
 
     marginals = MarginalsGLMSBM(; ŝ, ŵ, v, Γ, ω, gₒ, ψl, χl, χe, χ)
-    next_marginals = copy(marginals)
+    next_marginals = deepcopy(marginals)
     return (; marginals, next_marginals)
 end
 
@@ -106,95 +77,99 @@ function update_amp!(
     (; cᵢ, cₒ) = affinities(glmsbm)
     C = [cᵢ cₒ; cₒ cᵢ]
 
-    (ŝᵗ, ŵᵗ, vᵗ, Γᵗ, ωᵗ, gₒᵗ, ψlᵗ, χeᵗ, χlᵗ, χᵗ) = (
-        marginals.ŝ,
-        marginals.ŵ,
-        marginals.v,
-        marginals.Γ,
-        marginals.ω,
-        marginals.gₒ,
-        marginals.ψl,
-        marginals.χe,
-        marginals.χl,
-        marginals.χ,
-    )
+    ŝᵗ = marginals.ŝ
+    ŵᵗ = marginals.ŵ
+    vᵗ = marginals.v
+    Γᵗ = marginals.Γ
+    ωᵗ = marginals.ω
+    gₒᵗ = marginals.gₒ
+    ψlᵗ = marginals.ψl
+    χeᵗ = marginals.χe
+    χlᵗ = marginals.χl
+    χᵗ = marginals.χ
 
-    (ŝᵗ⁺¹, ŵᵗ⁺¹, vᵗ⁺¹, Γᵗ⁺¹, ωᵗ⁺¹, gₒᵗ⁺¹, ψlᵗ⁺¹, χeᵗ⁺¹, χlᵗ⁺¹, χᵗ⁺¹) = (
-        next_marginals.ŝ,
-        next_marginals.ŵ,
-        next_marginals.v,
-        next_marginals.Γ,
-        next_marginals.ω,
-        next_marginals.gₒ,
-        next_marginals.ψl,
-        next_marginals.χe,
-        next_marginals.χl,
-        next_marginals.χ,
-    )
+    ŝᵗ⁺¹ = next_marginals.ŝ
+    ŵᵗ⁺¹ = next_marginals.ŵ
+    vᵗ⁺¹ = next_marginals.v
+    Γᵗ⁺¹ = next_marginals.Γ
+    ωᵗ⁺¹ = next_marginals.ω
+    gₒᵗ⁺¹ = next_marginals.gₒ
+    ψlᵗ⁺¹ = next_marginals.ψl
+    χeᵗ⁺¹ = next_marginals.χe
+    χlᵗ⁺¹ = next_marginals.χl
+    χᵗ⁺¹ = next_marginals.χ
 
     # AMP update of ω, V
     Vᵗ⁺¹ = sum(vᵗ) / M
-    mul!(ωᵗ⁺¹, F, ŵᵗ)
-    ωᵗ⁺¹ .-= Vᵗ⁺¹ .* gₒᵗ
+    # mul!(ωᵗ⁺¹, F, ŵᵗ)
+    # ωᵗ⁺¹ .-= Vᵗ⁺¹ .* gₒᵗ
+    for μ in 1:N
+        ωᵗ⁺¹[μ] = sum(F[μ, l] * ŵᵗ[l] for l in 1:M) - Vᵗ⁺¹ * gₒᵗ[μ]
+    end
 
     # AMP update of ψl, gₒ, μ, Λ, Γ
-    for s in (-1, 1)
-        @views ψlᵗ⁺¹[ind(s), :] .= (one(R) .+ s .* erf.(ωᵗ⁺¹ ./ sqrt(2Vᵗ⁺¹))) ./ 2
+    # for s in (-1, 1)
+    #     @views ψlᵗ⁺¹[ind(s), :] .= (one(R) .+ s .* erf.(ωᵗ⁺¹ ./ sqrt(2Vᵗ⁺¹))) ./ 2
+    # end
+    # @views gₒᵗ⁺¹ = gₒ.(ωᵗ⁺¹, χlᵗ[1, :], Ref(Vᵗ⁺¹))  # TODO: toggle
+    # @views gₒᵗ⁺¹ = gₒ.(ωᵗ⁺¹, prior.(R, 1, Ξ), Ref(Vᵗ⁺¹))
+    for μ in 1:N
+        gₒᵗ⁺¹[μ] = gₒ(ωᵗ⁺¹[μ], prior(R, 1, Ξ[μ]), Vᵗ⁺¹)
     end
-    @views gₒᵗ⁺¹ = gₒ.(ωᵗ⁺¹, χlᵗ[1, :], Ref(Vᵗ⁺¹))
     Λᵗ⁺¹ = sum(abs2, gₒᵗ⁺¹) / M
-    mul!(Γᵗ⁺¹, F', gₒᵗ⁺¹)
-    Γᵗ⁺¹ .+= Λᵗ⁺¹ .* ŵᵗ
+    # mul!(Γᵗ⁺¹, F', gₒᵗ⁺¹)
+    # Γᵗ⁺¹ .+= Λᵗ⁺¹ .* ŵᵗ
+    for l in 1:M
+        Γᵗ⁺¹[l] = Λᵗ⁺¹ * ŵᵗ[l] + sum(F[μ, l] * gₒᵗ⁺¹[μ] for μ in 1:N)
+    end
 
     # AMP update of the estimated marginals a, v
     ŵᵗ⁺¹ .= fₐ.(Ref(Pʷ), Λᵗ⁺¹, Γᵗ⁺¹)
     vᵗ⁺¹ .= fᵥ.(Ref(Pʷ), Λᵗ⁺¹, Γᵗ⁺¹)
 
-    # BP update of the field h
-    hᵗ⁺¹ = Vector{R}(undef, 2)
-    for s in (-1, 1)
-        hᵗ⁺¹[ind(s)] =
-            sum(C[ind(s), ind(sμ)] * χᵗ[ind(sμ), μ] for μ in 1:N for sμ in (-1, 1)) / N
-    end
+    # # BP update of the field h
+    # hᵗ⁺¹ = Vector{R}(undef, 2)
+    # for s in (-1, 1)
+    #     hᵗ⁺¹[ind(s)] =
+    #         sum(C[ind(s), ind(sμ)] * χᵗ[ind(sμ), μ] for μ in 1:N for sμ in (-1, 1)) / N
+    # end
 
-    # BP update of the messages χe and of the marginals χ
+    # # BP update of the messages χe and of the marginals χ
+    # for μ in 1:N
+    #     for sμ in (-1, 1)
+    #         χᵗ⁺¹[ind(sμ), μ] = prior(R, sμ, Ξ[μ]) * exp(-hᵗ⁺¹[ind(sμ)]) * ψlᵗ⁺¹[ind(sμ), μ]
+    #         for η in neighbors(g, μ)
+    #             χᵗ⁺¹[ind(sμ), μ] *= sum(
+    #                 C[ind(sη), ind(sμ)] * χeᵗ[ind(sη), η, μ] for sη in (-1, 1)
+    #             )
+    #         end
+    #     end
+    #     @views χᵗ⁺¹[:, μ] ./= sum(χᵗ⁺¹[:, μ])
+    # end
+    # for μ in 1:N, ν in neighbors(g, μ)
+    #     for sμ in (-1, 1)
+    #         extra_factor = sum(C[ind(sν), ind(sμ)] * χeᵗ[ind(sν), ν, μ] for sν in (-1, 1))
+    #         χeᵗ⁺¹[ind(sμ), μ, ν] = χᵗ⁺¹[ind(sμ), μ] / extra_factor
+    #     end
+    #     normalization = χeᵗ⁺¹[1, μ, ν] + χeᵗ⁺¹[2, μ, ν]
+    #     χeᵗ⁺¹[1, μ, ν] /= normalization
+    #     χeᵗ⁺¹[2, μ, ν] /= normalization
+    # end
 
-    for μ in 1:N
-        for sμ in (-1, 1)
-            χᵗ⁺¹[ind(sμ), μ] = prior(R, sμ, Ξ[μ]) * exp(-hᵗ⁺¹[ind(sμ)]) * ψlᵗ⁺¹[ind(sμ), μ]
-            for η in neighbors(g, μ)
-                χᵗ⁺¹[ind(sμ), μ] *= sum(
-                    C[ind(sη), ind(sμ)] * χeᵗ[ind(sη), η, μ] for sη in (-1, 1)
-                )
-            end
-        end
-        @views χᵗ⁺¹[:, μ] ./= sum(χᵗ⁺¹[:, μ])
-    end
+    # # BP update of the SBM-to-GLM messages χl
+    # for μ in 1:N
+    #     for sμ in (-1, 1)
+    #         χlᵗ⁺¹[ind(sμ), μ] = prior(R, sμ, Ξ[μ]) * exp(-hᵗ⁺¹[ind(sμ)])
+    #         for η in neighbors(g, μ)
+    #             χlᵗ⁺¹[ind(sμ), μ] *= sum(
+    #                 C[ind(sη), ind(sμ)] * χeᵗ[ind(sη), η, μ] for sη in (-1, 1)
+    #             )
+    #         end
+    #     end
+    #     @views χlᵗ⁺¹[:, μ] ./= sum(χlᵗ⁺¹[:, μ])
+    # end
 
-    for μ in 1:N, ν in neighbors(g, μ)
-        for sμ in (-1, 1)
-            extra_factor = sum(C[ind(sν), ind(sμ)] * χeᵗ[ind(sν), ν, μ] for sν in (-1, 1))
-            χeᵗ⁺¹[ind(sμ), μ, ν] = χᵗ⁺¹[ind(sμ), μ] / extra_factor
-        end
-        normalization = χeᵗ⁺¹[1, μ, ν] + χeᵗ⁺¹[2, μ, ν]
-        χeᵗ⁺¹[1, μ, ν] /= normalization
-        χeᵗ⁺¹[2, μ, ν] /= normalization
-    end
-
-    # BP update of the SBM-to-GLM messages χl
-    for μ in 1:N
-        for sμ in (-1, 1)
-            χlᵗ⁺¹[ind(sμ), μ] = prior(R, sμ, Ξ[μ]) * exp(-hᵗ⁺¹[ind(sμ)])
-            for η in neighbors(g, μ)
-                χlᵗ⁺¹[ind(sμ), μ] *= sum(
-                    C[ind(sη), ind(sμ)] * χeᵗ[ind(sη), η, μ] for sη in (-1, 1)
-                )
-            end
-        end
-        @views χlᵗ⁺¹[:, μ] ./= sum(χlᵗ⁺¹[:, μ])
-    end
-
-    @views ŝᵗ⁺¹ .= 2 .* χᵗ⁺¹[1, :] .- one(R)
+    # @views ŝᵗ⁺¹ .= 2 .* χᵗ⁺¹[1, :] .- one(R)
 
     return nothing
 end
@@ -207,6 +182,7 @@ function run_amp(
     max_iterations=100,
     convergence_threshold=1e-3,
     recent_past=10,
+    damping=0.5,
     show_progress=false,
 )
     (; N, M) = glmsbm
@@ -220,7 +196,7 @@ function run_amp(
 
     for t in 1:max_iterations
         update_amp!(next_marginals, marginals, observations, glmsbm)
-        copy!(marginals, next_marginals)
+        copy_damp!(marginals, next_marginals; damping=(t == 1 ? zero(damping) : damping))
 
         ŝ_history[:, t] .= marginals.ŝ
         ŵ_history[:, t] .= marginals.ŵ

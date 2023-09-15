@@ -170,7 +170,7 @@ function run_amp(
     init_std=1e-3,
     max_iterations=100,
     convergence_threshold=1e-3,
-    recent_past=10,
+    recent_past=5,
     damping=0.5,
     show_progress=false,
 )

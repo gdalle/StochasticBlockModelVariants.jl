@@ -5,6 +5,6 @@
         GLMSBM(; N=10^2, M=10^2, c=5, λ=2, ρ=0.0, Pʷ=GaussianWeightPrior()),
         GLMSBM(; N=10^2, M=10^2, c=5, λ=2, ρ=0.1, Pʷ=RademacherWeightPrior()),
     ]
-        evaluate_amp(rng, sbm)
+        evaluate_amp(rng, sbm; max_iterations=2)
     end
 end

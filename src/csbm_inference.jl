@@ -127,7 +127,7 @@ function run_amp(
     observations::ObservationsCSBM,
     csbm::CSBM;
     init_std=1e-3,
-    max_iterations=100,
+    max_iterations=200,
     convergence_threshold=1e-3,
     recent_past=10,
     damping=0.0,
@@ -173,13 +173,13 @@ function run_amp(
         end
     end
 
-    return (; û_history, v̂_history, converged)
+    return (û_history, v̂_history, converged)
 end
 
 function evaluate_amp(rng::AbstractRNG, csbm::CSBM; kwargs...)
     (; latents, observations) = rand(rng, csbm)
-    (; û_history, v̂_history, converged) = run_amp(rng, observations, csbm; kwargs...)
-    q_dis = discrete_overlap(latents.u, û_history[:, end])
-    q_cont = continuous_overlap(latents.v, v̂_history[:, end])
-    return (; q_dis, q_cont, converged)
+    (û_history, v̂_history, converged) = run_amp(rng, observations, csbm; kwargs...)
+    qu = discrete_overlap(latents.u, û_history[:, end])
+    qv = continuous_overlap(latents.v, v̂_history[:, end])
+    return (qu, qv, converged)
 end

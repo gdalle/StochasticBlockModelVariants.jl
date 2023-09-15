@@ -88,11 +88,6 @@ end
 
 ## Simulation
 
-"""
-    rand(rng, csbm)
-
-Sample from a [`CSBM`](@ref) and return a named tuple `(; latents, observations)`.
-"""
 function Base.rand(rng::AbstractRNG, csbm::CSBM)
     (; N, P, μ, ρ) = csbm
 

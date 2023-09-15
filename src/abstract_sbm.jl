@@ -2,6 +2,11 @@
 $(TYPEDEF)
 
 Abstract supertype for Stochastic Block Models with additional node features.
+
+# Subtypes
+
+- [`CSBM`](@ref)
+- [`GLMSBM`](@ref)
 """
 abstract type AbstractSBM end
 
@@ -11,6 +16,13 @@ abstract type AbstractSBM end
 Return the number of nodes `N` in the graph.
 """
 Base.length
+
+"""
+    rand(rng, sbm::AbstractSBM)
+
+Sample observations consisting of a graph and continuous features, return a named tuple `(; latents, observations)`.
+"""
+Base.rand
 
 """
     nb_features(sbm::AbstractSBM)
@@ -34,7 +46,7 @@ Return the signal-to-noise ratio `λ` of the communities in the graph.
 function communities_snr end
 
 """
-    affinities(sbm)
+    affinities(sbm::AbstractSBM)
 
 Return a named tuple `(; cᵢ, cₒ)` containing the affinities inside and outside of a community.
 """
@@ -47,16 +59,16 @@ function affinities(sbm::AbstractSBM)
 end
 
 """
-    fraction_observed(sbm)
+    fraction_observed(sbm::AbstractSBM)
 
 Return the fraction `ρ` of community assignments that are observed.
 """
 function fraction_observed end
 
 """
-    sample_graph(rng, sbm, communities)
+    sample_graph(rng, sbm::AbstractSBM, communities::Vector{<:Integer})
 
-Sample a graph `g` from an SBM based on known community assignments.
+Sample a graph `g` based on known community assignments.
 """
 function sample_graph(rng::AbstractRNG, sbm::AbstractSBM, communities::Vector{<:Integer})
     N = length(sbm)
@@ -81,7 +93,7 @@ function sample_graph(rng::AbstractRNG, sbm::AbstractSBM, communities::Vector{<:
 end
 
 """
-    sample_mask(rng, sbm, communities)
+    sample_mask(rng, sbm::AbstractSBM, communities::Vector{<:Integer})
 
 Sample a vector `Ξ` (Xi) whose components are equal to the community assignments with probability `ρ` and equal to `missing` with probability `1-ρ`. 
 """
@@ -97,3 +109,40 @@ function sample_mask(rng::AbstractRNG, sbm::AbstractSBM, communities::Vector{<:I
     end
     return Ξ
 end
+
+"""
+    run_amp(
+        rng,
+        observations,
+        sbm::AbstractSBM;
+        init_std,
+        max_iterations,
+        convergence_threshold,
+        recent_past,
+        damping,
+        show_progress
+    )
+
+Run AMP-BP for `sbm` based on a set of `observations` to estimate the discrete communities and the continuous weights / centroids.
+
+Return a tuple `(discrete_history, continuous_history, converged)` containing the history of latent variable marginals as well as a boolean convergence indicator.
+
+# Keyword arguments
+
+- `init_std`: Noise level used to initialize some messages
+- `max_iterations`: Maximum number of iterations allowed
+- `convergence_threshold`: Lower bound that the standard deviation of recent latent estimates has to reach for the algorithm to have converged
+- `recent_past`: Number of instants taken into account when computing the recent standard deviation
+- `damping`: Fraction in `[0, 1]` telling us how much the previous message is copied into the next message
+- `show_progress`: Whether to display a progress bar with convergence statistics
+"""
+function run_amp end
+
+"""
+    evaluate_amp(rng, sbm; kwargs...)
+
+Sample observations from `sbm` and [`run_amp`](@ref) on them before computing discrete and continuous overlaps with the true latent variables.
+
+Return a tuple `(q_dis, q_cont, converged)` containing the final overlaps as well as a boolean convergence indicator.
+"""
+function evaluate_amp end

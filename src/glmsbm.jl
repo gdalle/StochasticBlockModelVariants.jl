@@ -77,11 +77,6 @@ end
 
 ## Simulation
 
-"""
-    rand(rng, glmsbm)
-
-Sample from a [`GLMSBM`](@ref) and return a named tuple `(; latents, observations)`.
-"""
 function Base.rand(rng::AbstractRNG, glmsbm::GLMSBM)
     (; N, M, ρ, Pʷ) = glmsbm
 

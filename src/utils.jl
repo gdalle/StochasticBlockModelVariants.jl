@@ -5,6 +5,11 @@ sigmoid(x) = 1 / (1 + exp(-x))
 
 freq_equalities(x, y) = mean(x[i] ≈ y[i] for i in eachindex(x, y))
 
+"""
+    discrete_overlap(x_true, x_est)
+
+Compute the alignment between two ±1-valued vectors, up to global sign switch.
+"""
 function discrete_overlap(u, û)
     R = eltype(û)
     û_sign = sign.(û)
@@ -14,6 +19,11 @@ function discrete_overlap(u, û)
     return qᵤ
 end
 
+"""
+    continuous_overlap(x_true, x_est)
+
+Compute the alignment between two real-valued vectors, up to global sign switch.
+"""
 function continuous_overlap(v, v̂)
     R = eltype(v)
     q̂ᵥ = max(dot(v̂, v), dot(v̂, -v))
@@ -21,9 +31,7 @@ function continuous_overlap(v, v̂)
     return qᵥ
 end
 
-function copy_damp!(
-    dest::T, source::T; damping=0
-) where {T}
+function copy_damp!(dest::T, source::T; damping=0) where {T}
     for n in fieldnames(T)
         x_dest = getfield(dest, n)
         x_source = getfield(source, n)

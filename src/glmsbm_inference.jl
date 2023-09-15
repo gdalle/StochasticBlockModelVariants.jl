@@ -20,6 +20,8 @@ $(TYPEDFIELDS)
     ω::Vector{R}
     "length `N`"
     gₒ::Vector{R}
+    "length 2"
+    h::Vector{R}
     "size `(2, N)`"
     ψl::Matrix{R}
     "size `(2, N, N)`"
@@ -50,6 +52,7 @@ function init_amp(
 
     ω = zeros(R, N)
     gₒ = zeros(R, N)
+    h = zeros(R, 2)
 
     ψl = ones(R, 2, N) / 2
     χe = Dict{Tuple{Int,Int,Int},R}()
@@ -61,7 +64,7 @@ function init_amp(
     χl = ones(R, 2, N) / 2
     χ = ones(R, 2, N) / 2
 
-    marginals = MarginalsGLMSBM(; ŝ, ŵ, v, Γ, ω, gₒ, ψl, χl, χe, χ)
+    marginals = MarginalsGLMSBM(; ŝ, ŵ, v, Γ, ω, gₒ, h, ψl, χl, χe, χ)
     next_marginals = deepcopy(marginals)
     return (; marginals, next_marginals)
 end
@@ -75,15 +78,11 @@ function update_amp!(
     (; N, M, c, λ, Pʷ) = glmsbm
     (; g, Ξ, F) = observations
     (; cᵢ, cₒ) = affinities(glmsbm)
-    C = [cᵢ cₒ; cₒ cᵢ]
+    C = ((cᵢ, cₒ), (cₒ, cᵢ))
 
-    ŝᵗ = marginals.ŝ
     ŵᵗ = marginals.ŵ
     vᵗ = marginals.v
-    Γᵗ = marginals.Γ
-    ωᵗ = marginals.ω
     gₒᵗ = marginals.gₒ
-    ψlᵗ = marginals.ψl
     χeᵗ = marginals.χe
     χlᵗ = marginals.χl
     χᵗ = marginals.χ
@@ -94,6 +93,7 @@ function update_amp!(
     Γᵗ⁺¹ = next_marginals.Γ
     ωᵗ⁺¹ = next_marginals.ω
     gₒᵗ⁺¹ = next_marginals.gₒ
+    hᵗ⁺¹ = next_marginals.h
     ψlᵗ⁺¹ = next_marginals.ψl
     χeᵗ⁺¹ = next_marginals.χe
     χlᵗ⁺¹ = next_marginals.χl
@@ -101,75 +101,64 @@ function update_amp!(
 
     # AMP update of ω, V
     Vᵗ⁺¹ = sum(vᵗ) / M
-    # mul!(ωᵗ⁺¹, F, ŵᵗ)
-    # ωᵗ⁺¹ .-= Vᵗ⁺¹ .* gₒᵗ
-    for μ in 1:N
-        ωᵗ⁺¹[μ] = sum(F[μ, l] * ŵᵗ[l] for l in 1:M) - Vᵗ⁺¹ * gₒᵗ[μ]
-    end
+    mul!(ωᵗ⁺¹, F, ŵᵗ)
+    ωᵗ⁺¹ .-= Vᵗ⁺¹ .* gₒᵗ
 
     # AMP update of ψl, gₒ, μ, Λ, Γ
-    # for s in (-1, 1)
-    #     @views ψlᵗ⁺¹[ind(s), :] .= (one(R) .+ s .* erf.(ωᵗ⁺¹ ./ sqrt(2Vᵗ⁺¹))) ./ 2
-    # end
-    # @views gₒᵗ⁺¹ = gₒ.(ωᵗ⁺¹, χlᵗ[1, :], Ref(Vᵗ⁺¹))  # TODO: toggle
-    # @views gₒᵗ⁺¹ = gₒ.(ωᵗ⁺¹, prior.(R, 1, Ξ), Ref(Vᵗ⁺¹))
-    for μ in 1:N
-        gₒᵗ⁺¹[μ] = gₒ(ωᵗ⁺¹[μ], prior(R, 1, Ξ[μ]), Vᵗ⁺¹)
+    for s in (-1, 1)
+        @views ψlᵗ⁺¹[ind(s), :] .= (one(R) .+ s .* erf.(ωᵗ⁺¹ ./ sqrt(2Vᵗ⁺¹))) ./ 2
     end
+    @views gₒᵗ⁺¹ .= gₒ.(ωᵗ⁺¹, χlᵗ[1, :], Ref(Vᵗ⁺¹))
     Λᵗ⁺¹ = sum(abs2, gₒᵗ⁺¹) / M
-    # mul!(Γᵗ⁺¹, F', gₒᵗ⁺¹)
-    # Γᵗ⁺¹ .+= Λᵗ⁺¹ .* ŵᵗ
-    for l in 1:M
-        Γᵗ⁺¹[l] = Λᵗ⁺¹ * ŵᵗ[l] + sum(F[μ, l] * gₒᵗ⁺¹[μ] for μ in 1:N)
-    end
+    mul!(Γᵗ⁺¹, F', gₒᵗ⁺¹)
+    Γᵗ⁺¹ .+= Λᵗ⁺¹ .* ŵᵗ
 
     # AMP update of the estimated marginals a, v
     ŵᵗ⁺¹ .= fₐ.(Ref(Pʷ), Λᵗ⁺¹, Γᵗ⁺¹)
     vᵗ⁺¹ .= fᵥ.(Ref(Pʷ), Λᵗ⁺¹, Γᵗ⁺¹)
 
     # # BP update of the field h
-    # hᵗ⁺¹ = Vector{R}(undef, 2)
-    # for s in (-1, 1)
-    #     hᵗ⁺¹[ind(s)] =
-    #         sum(C[ind(s), ind(sμ)] * χᵗ[ind(sμ), μ] for μ in 1:N for sμ in (-1, 1)) / N
-    # end
+    for s in (-1, 1)
+        hᵗ⁺¹[ind(s)] =
+            sum(C[ind(s)][ind(sμ)] * χᵗ[ind(sμ), μ] for μ in 1:N for sμ in (-1, 1)) / N
+    end
 
     # # BP update of the messages χe and of the marginals χ
-    # for μ in 1:N
-    #     for sμ in (-1, 1)
-    #         χᵗ⁺¹[ind(sμ), μ] = prior(R, sμ, Ξ[μ]) * exp(-hᵗ⁺¹[ind(sμ)]) * ψlᵗ⁺¹[ind(sμ), μ]
-    #         for η in neighbors(g, μ)
-    #             χᵗ⁺¹[ind(sμ), μ] *= sum(
-    #                 C[ind(sη), ind(sμ)] * χeᵗ[ind(sη), η, μ] for sη in (-1, 1)
-    #             )
-    #         end
-    #     end
-    #     @views χᵗ⁺¹[:, μ] ./= sum(χᵗ⁺¹[:, μ])
-    # end
-    # for μ in 1:N, ν in neighbors(g, μ)
-    #     for sμ in (-1, 1)
-    #         extra_factor = sum(C[ind(sν), ind(sμ)] * χeᵗ[ind(sν), ν, μ] for sν in (-1, 1))
-    #         χeᵗ⁺¹[ind(sμ), μ, ν] = χᵗ⁺¹[ind(sμ), μ] / extra_factor
-    #     end
-    #     normalization = χeᵗ⁺¹[1, μ, ν] + χeᵗ⁺¹[2, μ, ν]
-    #     χeᵗ⁺¹[1, μ, ν] /= normalization
-    #     χeᵗ⁺¹[2, μ, ν] /= normalization
-    # end
+    for μ in 1:N
+        for sμ in (-1, 1)
+            χᵗ⁺¹[ind(sμ), μ] = prior(R, sμ, Ξ[μ]) * exp(-hᵗ⁺¹[ind(sμ)]) * ψlᵗ⁺¹[ind(sμ), μ]
+            for η in neighbors(g, μ)
+                χᵗ⁺¹[ind(sμ), μ] *= sum(
+                    C[ind(sη)][ind(sμ)] * χeᵗ[ind(sη), η, μ] for sη in (-1, 1)
+                )
+            end
+        end
+        @views χᵗ⁺¹[:, μ] ./= sum(χᵗ⁺¹[:, μ])
+    end
+    for μ in 1:N, ν in neighbors(g, μ)
+        for sμ in (-1, 1)
+            extra_factor = sum(C[ind(sν)][ind(sμ)] * χeᵗ[ind(sν), ν, μ] for sν in (-1, 1))
+            χeᵗ⁺¹[ind(sμ), μ, ν] = χᵗ⁺¹[ind(sμ), μ] / extra_factor
+        end
+        normalization = χeᵗ⁺¹[1, μ, ν] + χeᵗ⁺¹[2, μ, ν]
+        χeᵗ⁺¹[1, μ, ν] /= normalization
+        χeᵗ⁺¹[2, μ, ν] /= normalization
+    end
 
     # # BP update of the SBM-to-GLM messages χl
-    # for μ in 1:N
-    #     for sμ in (-1, 1)
-    #         χlᵗ⁺¹[ind(sμ), μ] = prior(R, sμ, Ξ[μ]) * exp(-hᵗ⁺¹[ind(sμ)])
-    #         for η in neighbors(g, μ)
-    #             χlᵗ⁺¹[ind(sμ), μ] *= sum(
-    #                 C[ind(sη), ind(sμ)] * χeᵗ[ind(sη), η, μ] for sη in (-1, 1)
-    #             )
-    #         end
-    #     end
-    #     @views χlᵗ⁺¹[:, μ] ./= sum(χlᵗ⁺¹[:, μ])
-    # end
+    for μ in 1:N
+        for sμ in (-1, 1)
+            χlᵗ⁺¹[ind(sμ), μ] = prior(R, sμ, Ξ[μ]) * exp(-hᵗ⁺¹[ind(sμ)])
+            for η in neighbors(g, μ)
+                χlᵗ⁺¹[ind(sμ), μ] *= sum(
+                    C[ind(sη)][ind(sμ)] * χeᵗ[ind(sη), η, μ] for sη in (-1, 1)
+                )
+            end
+        end
+        @views χlᵗ⁺¹[:, μ] ./= sum(χlᵗ⁺¹[:, μ])
+    end
 
-    # @views ŝᵗ⁺¹ .= 2 .* χᵗ⁺¹[1, :] .- one(R)
+    @views ŝᵗ⁺¹ .= 2 .* χᵗ⁺¹[1, :] .- one(R)
 
     return nothing
 end
@@ -225,13 +214,13 @@ function run_amp(
         end
     end
 
-    return (; ŝ_history, ŵ_history, converged)
+    return (ŝ_history, ŵ_history, converged)
 end
 
 function evaluate_amp(rng::AbstractRNG, glmsbm::GLMSBM; kwargs...)
     (; latents, observations) = rand(rng, glmsbm)
-    (; ŝ_history, ŵ_history, converged) = run_amp(rng, observations, glmsbm; kwargs...)
-    q_dis = discrete_overlap(latents.s, ŝ_history[:, end])
-    q_cont = continuous_overlap(latents.w, ŵ_history[:, end])
-    return (; q_dis, q_cont, converged)
+    (ŝ_history, ŵ_history, converged) = run_amp(rng, observations, glmsbm; kwargs...)
+    qs = discrete_overlap(latents.s, ŝ_history[:, end])
+    qw = continuous_overlap(latents.w, ŵ_history[:, end])
+    return (qs, qw, converged)
 end

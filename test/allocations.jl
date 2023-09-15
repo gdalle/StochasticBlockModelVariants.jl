@@ -14,6 +14,4 @@ function test_allocations(sbm::AbstractSBM)
 end
 
 test_allocations(CSBM(; N=10^3, P=10^3, d=5, λ=2, μ=2, ρ=0.0))
-@test_skip test_allocations(
-    GLMSBM(; N=10^3, M=10^3, c=5, λ=2, ρ=0.0, Pʷ=GaussianWeightPrior())
-)
+test_allocations(GLMSBM(; N=10^3, M=10^3, c=5, λ=2, ρ=0.0, Pʷ=GaussianWeightPrior()))

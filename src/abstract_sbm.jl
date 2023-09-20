@@ -11,6 +11,30 @@ Abstract supertype for Stochastic Block Models with additional node features.
 abstract type AbstractSBM end
 
 """
+$(TYPEDEF)
+
+Abstract supertype for SBM communities and latent weights / centroids.
+
+# Subtypes
+
+- [`LatentsCSBM`](@ref)
+- [`LatentsGLMSBM`](@ref)
+"""
+abstract type AbstractLatents end
+
+"""
+$(TYPEDEF)
+
+Abstract supertype for SBM graph and node feature observations.
+
+# Subtypes
+
+- [`ObservationsCSBM`](@ref)
+- [`ObservationsGLMSBM`](@ref)
+"""
+abstract type AbstractObservations end
+
+"""
     length(sbm::AbstractSBM)
 
 Return the number of nodes `N` in the graph.
@@ -27,7 +51,7 @@ Base.rand
 """
     nb_features(sbm::AbstractSBM)
 
-Return the number of nodes `N` in the graph.
+Return the number of features per node, called either `P` or `M` depending on the paper.
 """
 function nb_features end
 
@@ -136,7 +160,65 @@ Return a tuple `(discrete_history, continuous_history, converged)` containing th
 - `damping`: Fraction in `[0, 1]` telling us how much the previous message is copied into the next message
 - `show_progress`: Whether to display a progress bar with convergence statistics
 """
-function run_amp end
+function run_amp(
+    rng::AbstractRNG,
+    observations,
+    sbm::AbstractSBM;
+    init_std=1e-3,
+    max_iterations=200,
+    convergence_threshold=1e-3,
+    recent_past=5,
+    damping=0.0,
+    show_progress=false,
+)
+    N = length(sbm)
+    P = nb_features(sbm)
+    (; marginals, next_marginals) = init_amp(rng, observations, sbm; init_std)
+
+    R = eltype(marginals)
+    discrete_history = Matrix{R}(undef, N, max_iterations)
+    continuous_history = Matrix{R}(undef, P, max_iterations)
+    converged = false
+    prog = Progress(max_iterations; desc="AMP-BP", enabled=show_progress)
+
+    for t in 1:max_iterations
+        update_amp!(next_marginals, marginals, observations, sbm)
+        copy_damp!(marginals, next_marginals; damping=(t == 1 ? zero(damping) : damping))
+
+        discrete_history[:, t] .= discrete_estimates(marginals)
+        continuous_history[:, t] .= continuous_estimates(marginals)
+
+        if t <= recent_past
+            discrete_recent_std = typemax(R)
+            continuous_recent_std = typemax(R)
+        else
+            discrete_recent_std = mean(
+                std(view(discrete_history, :, (t - recent_past):t); dims=2)
+            )
+            continuous_recent_std = mean(
+                std(view(continuous_history, :, (t - recent_past):t); dims=2)
+            )
+        end
+        converged = (
+            discrete_recent_std < convergence_threshold &&
+            continuous_recent_std < convergence_threshold
+        )
+        if converged
+            discrete_history = discrete_history[:, 1:t]
+            continuous_history = continuous_history[:, 1:t]
+            break
+        else
+            showvalues = [
+                (:discrete_recent_std, discrete_recent_std),
+                (:continuous_recent_std, continuous_recent_std),
+                (:convergence_threshold, convergence_threshold),
+            ]
+            next!(prog; showvalues)
+        end
+    end
+
+    return (; discrete_history, continuous_history, converged)
+end
 
 """
     evaluate_amp(rng, sbm; kwargs...)
@@ -145,4 +227,38 @@ Sample observations from `sbm` and [`run_amp`](@ref) on them before computing di
 
 Return a tuple `(q_dis, q_cont, converged)` containing the final overlaps as well as a boolean convergence indicator.
 """
-function evaluate_amp end
+function evaluate_amp(
+    rng::AbstractRNG,
+    sbm::AbstractSBM,
+    latents::AbstractLatents,
+    observations::AbstractObservations;
+    kwargs...,
+)
+    (; discrete_history, continuous_history, converged) = run_amp(
+        rng, observations, sbm; kwargs...
+    )
+    q_discrete = discrete_overlap(discrete_values(latents), discrete_history[:, end])
+    q_continuous = continuous_overlap(
+        continuous_values(latents), continuous_history[:, end]
+    )
+    return (; q_discrete, q_continuous, converged)
+end
+
+function evaluate_amp(rng::AbstractRNG, sbm::AbstractSBM; kwargs...)
+    (; latents, observations) = rand(rng, sbm)
+    return evaluate_amp(rng, sbm, latents, observations; kwargs...)
+end
+
+function semisupervised_loss_amp(
+    rng::AbstractRNG, sbm::AbstractSBM, observations::AbstractObservations; kwargs...
+)
+    Ξ_backup = copy(observations.Ξ)
+    observations.Ξ .= missing
+    (; discrete_history, continuous_history, converged) = run_amp(
+        rng, observations, sbm; kwargs...
+    )
+    observations.Ξ .= Ξ_backup
+    discrete_est = discrete_history[:, end]
+    L = sum(abs2, skipmissing(discrete_est - observations.Ξ))
+    return L
+end

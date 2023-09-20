@@ -1,7 +1,7 @@
 using Base.Threads
 using CairoMakie
 using LinearAlgebra
-using Random: default_rng
+using Random: default_rng, rand!
 using Statistics
 using StochasticBlockModelVariants
 using ProgressMeter
@@ -17,11 +17,13 @@ function compute_fig1_csbm(; α, d, μ, ρ, N_values, λ_values, trials)
     prog = Progress(I * J * K; desc="CSBM - Fig 1")
     for i in 1:I
         for j in 1:J
-            @threads for k in 1:K
-                N, λ = N_values[i], λ_values[j]
-                P = ceil(Int, N / α)
-                csbm = CSBM(; N, P, d, μ, λ, ρ)
-                (qu, qv, converged) = evaluate_amp(rng, csbm)
+            N, λ = N_values[i], λ_values[j]
+            P = ceil(Int, N / α)
+            csbm = CSBM(; N, P, d, μ, λ, ρ)
+            B = rand(rng, csbm).observations.B
+            for k in 1:K  # don't parallelize
+                (; latents, observations) = rand!(rng, B, csbm)
+                (qu, qv, converged) = evaluate_amp(rng, csbm, latents, observations)
                 qu_values[i, j, k] = qu
                 qv_values[i, j, k] = qv
                 converged_values[i, j, k] = converged

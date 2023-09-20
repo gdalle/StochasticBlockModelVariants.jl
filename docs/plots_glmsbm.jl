@@ -1,7 +1,7 @@
 using Base.Threads
 using CairoMakie
 using LinearAlgebra
-using Random: default_rng
+using Random: default_rng, rand!
 using Statistics
 using StochasticBlockModelVariants
 using ProgressMeter
@@ -17,11 +17,13 @@ function compute_fig1_glmsbm(; N, c, ρ, Pʷ, α_values, λ_values, trials)
     prog = Progress(I * J * K; desc="CSBM - Fig 1")
     for i in 1:I
         for j in 1:J
-            @threads for k in 1:K
-                α, λ = α_values[i], λ_values[j]
-                M = ceil(Int, N / α)
-                glmsbm = GLMSBM(; N, M, c, λ, ρ, Pʷ)
-                (qs, qw, converged) = evaluate_amp(rng, glmsbm)
+            α, λ = α_values[i], λ_values[j]
+            M = ceil(Int, N / α)
+            glmsbm = GLMSBM(; N, M, c, λ, ρ, Pʷ)
+            F = rand(rng, glmsbm).observations.F
+            for k in 1:K  # don't parallelize
+                (; latents, observations) = rand!(rng, F, glmsbm)
+                (qs, qw, converged) = evaluate_amp(rng, glmsbm, latents, observations)
                 qs_values[i, j, k] = qs
                 qw_values[i, j, k] = qw
                 converged_values[i, j, k] = converged
@@ -43,8 +45,8 @@ function plot_fig1_glmsbm(res; α_values, λ_values)
         lines!(ax1, λ_values, qs_means; label="α=$α")
         errorbars!(ax1, λ_values, qs_means, qs_stds; label=nothing)
 
-        qw_means = dropdims(mean(qs_values[i, :, :]; dims=2); dims=2)
-        qw_stds = dropdims(std(qs_values[i, :, :]; dims=2); dims=2)
+        qw_means = dropdims(mean(qw_values[i, :, :]; dims=2); dims=2)
+        qw_stds = dropdims(std(qw_values[i, :, :]; dims=2); dims=2)
         lines!(ax2, λ_values, qw_means; label="α=$α")
         errorbars!(ax2, λ_values, qw_means, qw_stds; label=nothing)
     end
@@ -58,6 +60,6 @@ Pʷ = GaussianWeightPrior()
 α_values = reverse([0.3, 1, 3, 10, 30])
 α_values = reverse([0.3, 1])
 λ_values = 0:0.1:2
-trials = 10
+trials = 1
 res1 = compute_fig1_glmsbm(; N, c, ρ, Pʷ, α_values, λ_values, trials)  # kills Julia
 plot_fig1_glmsbm(res1; α_values, λ_values)

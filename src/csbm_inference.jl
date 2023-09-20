@@ -28,6 +28,9 @@ end
 
 Base.eltype(::MarginalsCSBM{R}) where {R} = R
 
+discrete_estimates(marginals::MarginalsCSBM) = marginals.û
+continuous_estimates(marginals::MarginalsCSBM) = marginals.v̂
+
 ## Message-passing
 
 function init_amp(
@@ -120,66 +123,4 @@ function update_amp!(
     ûᵗ⁺¹ .= 2 .* χ₊ .- one(R)
 
     return nothing
-end
-
-function run_amp(
-    rng::AbstractRNG,
-    observations::ObservationsCSBM,
-    csbm::CSBM;
-    init_std=1e-3,
-    max_iterations=200,
-    convergence_threshold=1e-3,
-    recent_past=5,
-    damping=0.0,
-    show_progress=false,
-)
-    (; N, P) = csbm
-    (; marginals, next_marginals) = init_amp(rng, observations, csbm; init_std)
-
-    R = eltype(marginals)
-    û_history = Matrix{R}(undef, N, max_iterations)
-    v̂_history = Matrix{R}(undef, P, max_iterations)
-    converged = false
-    prog = Progress(max_iterations; desc="AMP-BP for CSBM", enabled=show_progress)
-
-    for t in 1:max_iterations
-        update_amp!(next_marginals, marginals, observations, csbm)
-        copy_damp!(marginals, next_marginals; damping=(t == 1 ? zero(damping) : damping))
-
-        û_history[:, t] .= marginals.û
-        v̂_history[:, t] .= marginals.v̂
-
-        if t <= recent_past
-            û_recent_std = typemax(R)
-            v̂_recent_std = typemax(R)
-        else
-            û_recent_std = mean(std(view(û_history, :, (t - recent_past):t); dims=2))
-            v̂_recent_std = mean(std(view(v̂_history, :, (t - recent_past):t); dims=2))
-        end
-        converged = (
-            û_recent_std < convergence_threshold && v̂_recent_std < convergence_threshold
-        )
-        if converged
-            û_history = û_history[:, 1:t]
-            v̂_history = v̂_history[:, 1:t]
-            break
-        else
-            showvalues = [
-                (:û_recent_std, û_recent_std),
-                (:v̂_recent_std, v̂_recent_std),
-                (:convergence_threshold, convergence_threshold),
-            ]
-            next!(prog; showvalues)
-        end
-    end
-
-    return (û_history, v̂_history, converged)
-end
-
-function evaluate_amp(rng::AbstractRNG, csbm::CSBM; kwargs...)
-    (; latents, observations) = rand(rng, csbm)
-    (û_history, v̂_history, converged) = run_amp(rng, observations, csbm; kwargs...)
-    qu = discrete_overlap(latents.u, û_history[:, end])
-    qv = continuous_overlap(latents.v, v̂_history[:, end])
-    return (qu, qv, converged)
 end

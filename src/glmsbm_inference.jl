@@ -34,6 +34,9 @@ end
 
 Base.eltype(::MarginalsGLMSBM{R}) where {R} = R
 
+discrete_estimates(marginals::MarginalsGLMSBM) = marginals.ŝ
+continuous_estimates(marginals::MarginalsGLMSBM) = marginals.ŵ
+
 ## Message-passing
 
 ind(s) = mod(s, 3)  # sends 1 to 1 and -1 to 2
@@ -75,7 +78,7 @@ function update_amp!(
     observations::ObservationsGLMSBM,
     glmsbm::GLMSBM,
 ) where {R}
-    (; N, M, c, λ, Pʷ) = glmsbm
+    (; N, M, Pʷ) = glmsbm
     (; g, Ξ, F) = observations
     (; cᵢ, cₒ) = affinities(glmsbm)
     C = ((cᵢ, cₒ), (cₒ, cᵢ))
@@ -161,66 +164,4 @@ function update_amp!(
     @views ŝᵗ⁺¹ .= 2 .* χᵗ⁺¹[1, :] .- one(R)
 
     return nothing
-end
-
-function run_amp(
-    rng::AbstractRNG,
-    observations::ObservationsGLMSBM,
-    glmsbm::GLMSBM;
-    init_std=1e-3,
-    max_iterations=100,
-    convergence_threshold=1e-3,
-    recent_past=5,
-    damping=0.5,
-    show_progress=false,
-)
-    (; N, M) = glmsbm
-    (; marginals, next_marginals) = init_amp(rng, observations, glmsbm; init_std)
-
-    R = eltype(marginals)
-    ŝ_history = Matrix{R}(undef, N, max_iterations)
-    ŵ_history = Matrix{R}(undef, M, max_iterations)
-    converged = false
-    prog = Progress(max_iterations; desc="AMP-BP for GLM-SBM", enabled=show_progress)
-
-    for t in 1:max_iterations
-        update_amp!(next_marginals, marginals, observations, glmsbm)
-        copy_damp!(marginals, next_marginals; damping=(t == 1 ? zero(damping) : damping))
-
-        ŝ_history[:, t] .= marginals.ŝ
-        ŵ_history[:, t] .= marginals.ŵ
-
-        if t <= recent_past
-            ŝ_recent_std = typemax(R)
-            ŵ_recent_std = typemax(R)
-        else
-            ŝ_recent_std = mean(std(view(ŝ_history, :, (t - recent_past):t); dims=2))
-            ŵ_recent_std = mean(std(view(ŵ_history, :, (t - recent_past):t); dims=2))
-        end
-        converged = (
-            ŝ_recent_std < convergence_threshold && ŵ_recent_std < convergence_threshold
-        )
-        if converged
-            ŝ_history = ŝ_history[:, 1:t]
-            ŵ_history = ŵ_history[:, 1:t]
-            break
-        else
-            showvalues = [
-                (:ŝ_recent_std, ŝ_recent_std),
-                (:ŵ_recent_std, ŵ_recent_std),
-                (:convergence_threshold, convergence_threshold),
-            ]
-            next!(prog; showvalues)
-        end
-    end
-
-    return (ŝ_history, ŵ_history, converged)
-end
-
-function evaluate_amp(rng::AbstractRNG, glmsbm::GLMSBM; kwargs...)
-    (; latents, observations) = rand(rng, glmsbm)
-    (ŝ_history, ŵ_history, converged) = run_amp(rng, observations, glmsbm; kwargs...)
-    qs = discrete_overlap(latents.s, ŝ_history[:, end])
-    qw = continuous_overlap(latents.w, ŵ_history[:, end])
-    return (qs, qw, converged)
 end

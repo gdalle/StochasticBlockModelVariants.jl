@@ -15,7 +15,7 @@ using Graphs: AbstractGraph, neighbors
 using LinearAlgebra: LinearAlgebra, dot, mul!, norm
 using PrecompileTools: @compile_workload
 using ProgressMeter: Progress, next!
-using Random: AbstractRNG, default_rng
+using Random: Random, AbstractRNG, default_rng, rand!, randn!
 using SimpleWeightedGraphs: SimpleWeightedGraph
 using SpecialFunctions: erf
 using Statistics: mean, std
@@ -26,7 +26,7 @@ export nb_features, average_degree, communities_snr, affinities, features_snr, e
 export CSBM, LatentsCSBM, ObservationsCSBM
 export GLMSBM, LatentsGLMSBM, ObservationsGLMSBM
 export GaussianWeightPrior, RademacherWeightPrior
-export init_amp, update_amp!, run_amp, evaluate_amp
+export init_amp, update_amp!, run_amp, evaluate_amp, semisupervised_loss_amp
 export discrete_overlap, continuous_overlap
 
 include("utils.jl")
